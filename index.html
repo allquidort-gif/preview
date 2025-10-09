@@ -1,767 +1,445 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Referral Engine Dashboard</title>
-  <!-- Tailwind (assumes Tailwind is available in your stack). If not, swap to your build. -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    @media print { .no-print { display: none !important; } }
-  </style>
-</head>
-<body class="bg-gray-100 text-gray-900">
-  <!-- Toast -->
-  <div id="toast" class="fixed top-5 right-5 z-50 hidden px-4 py-3 rounded-lg shadow bg-gray-900 text-white"></div>
-
-  <main class="max-w-7xl mx-auto px-4 py-8">
-    <!-- Header + Settings -->
-    <div class="mb-6 flex items-center justify-between">
-      <h1 class="text-2xl font-bold tracking-tight">Referral Engine</h1>
-      <div class="flex items-center gap-2 no-print">
-        <button id="openSettings" class="px-3 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 text-sm font-medium">Settings</button>
-        <button id="exportBtn" class="px-3 py-2 rounded-lg bg-white shadow text-sm font-medium">Export CSVs</button>
-        <label class="px-3 py-2 rounded-lg bg-white shadow text-sm font-medium cursor-pointer">Import CSVs
-          <input id="importInput" type="file" accept=".csv" class="hidden" multiple />
-        </label>
-        <button onclick="window.print()" class="px-3 py-2 rounded-lg bg-white shadow text-sm font-medium">Print</button>
-      </div>
-    </div>
-
+```html
+<main class="max-w-7xl mx-auto px-4 py-8">
     <!-- Quick Stats Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-      <div class="bg-white rounded-xl shadow p-6">
-        <div class="text-center">
-          <p class="text-gray-500 text-sm font-medium">Clients Asked</p>
-          <p class="text-3xl font-bold text-blue-600" id="clientsAskedStat">0 of 0</p>
-          <p class="text-sm text-blue-500" id="clientsAskedPercent">0%</p>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+        <div class="bg-white rounded-2xl card-shadow card-hover p-8 border border-gray-100">
+            <div class="text-center">
+                <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mx-auto mb-4">
+                    <span class="text-2xl">🎯</span>
+                </div>
+                <p class="text-gray-600 text-sm font-medium mb-2">Clients Asked</p>
+                <p class="text-3xl font-bold text-blue-600 mb-1" id="clientsAskedStat">12 of 15</p>
+                <p class="text-sm text-blue-500 font-medium" id="clientsAskedPercent">80%</p>
+            </div>
         </div>
-      </div>
 
-      <div class="bg-white rounded-xl shadow p-6">
-        <div class="text-center">
-          <p class="text-gray-500 text-sm font-medium">Referrals Received</p>
-          <p class="text-3xl font-bold text-green-600" id="referralsReceived">0</p>
-          <p class="text-sm text-green-500">This month</p>
+        <div class="bg-white rounded-2xl card-shadow card-hover p-8 border border-gray-100">
+            <div class="text-center">
+                <div class="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mx-auto mb-4">
+                    <span class="text-2xl">📈</span>
+                </div>
+                <p class="text-gray-600 text-sm font-medium mb-2">Referrals Received</p>
+                <p class="text-3xl font-bold text-green-600 mb-1" id="referralsReceived">8</p>
+                <p class="text-sm text-green-500 font-medium">This month</p>
+            </div>
         </div>
-      </div>
 
-      <div class="bg-white rounded-xl shadow p-6">
-        <div class="text-center">
-          <p class="text-gray-500 text-sm font-medium">Referral Revenue</p>
-          <p class="text-3xl font-bold text-purple-600" id="referralRevenue">$0</p>
-          <p class="text-sm text-purple-500">This quarter</p>
+        <div class="bg-white rounded-2xl card-shadow card-hover p-8 border border-gray-100">
+            <div class="text-center">
+                <div class="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mx-auto mb-4">
+                    <span class="text-2xl">💰</span>
+                </div>
+                <p class="text-gray-600 text-sm font-medium mb-2">Referral Revenue</p>
+                <p class="text-3xl font-bold text-purple-600 mb-1" id="referralRevenue">$127K</p>
+                <p class="text-sm text-purple-500 font-medium">This quarter</p>
+            </div>
         </div>
-      </div>
 
-      <div class="bg-white rounded-xl shadow p-6">
-        <div class="text-center">
-          <p class="text-gray-500 text-sm font-medium">Best Partner</p>
-          <p class="text-lg font-bold text-orange-600" id="bestPartner">—</p>
-          <p class="text-sm text-orange-500" id="bestPartnerCount">0 referrals</p>
+        <div class="bg-white rounded-2xl card-shadow card-hover p-8 border border-gray-100">
+            <div class="text-center">
+                <div class="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center mx-auto mb-4">
+                    <span class="text-2xl">🤝</span>
+                </div>
+                <p class="text-gray-600 text-sm font-medium mb-2">Best Partner</p>
+                <p class="text-lg font-bold text-orange-600 mb-1" id="bestPartner">BuildRight GC</p>
+                <p class="text-sm text-orange-500 font-medium" id="bestPartnerCount">5 referrals</p>
+            </div>
         </div>
-      </div>
     </div>
 
     <!-- Step 1: Client Tracker -->
-    <div class="bg-white rounded-xl shadow mb-8">
-      <div class="px-6 py-4 border-b border-gray-200">
-        <h2 class="text-xl font-bold">Step 1: ASK Every Client</h2>
-        <p class="text-gray-600 text-sm">30 days after job completion: "Who else needs electrical work?"</p>
-      </div>
-
-      <!-- Add Client / Prompt Form -->
-      <div class="px-6 py-4 bg-gray-50 border-b border-gray-200 no-print">
-        <div class="grid grid-cols-1 md:grid-cols-6 gap-3">
-          <input type="text" id="clientName" placeholder="Client Name" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-          <input type="text" id="clientCompany" placeholder="Company" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-          <input type="date" id="lastJobDate" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-          <select id="askTrigger" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-            <option value="">Trigger</option>
-            <option value="job_completed">Job Completed</option>
-            <option value="service_call_success">Service Call Success</option>
-            <option value="multi_location">Multi-location Hint</option>
-            <option value="NPS_9_10">NPS 9–10</option>
-          </select>
-          <select id="askedReferral" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-            <option value="">Asked?</option>
-            <option value="Yes">✅ Yes</option>
-            <option value="No">❌ No</option>
-          </select>
-          <div class="flex gap-2">
-            <button id="addClientBtn" class="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">Add Client</button>
-            <button id="createPromptBtn" class="flex-1 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors">Create Prompt</button>
-          </div>
+    <div class="bg-white rounded-2xl card-shadow mb-10 border border-gray-100">
+        <div class="px-8 py-6 border-b border-gray-100">
+            <div class="flex items-center space-x-3 mb-2">
+                <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <span class="text-blue-600 font-bold">1</span>
+                </div>
+                <h2 class="text-2xl font-bold text-gray-800">ASK Every Client</h2>
+            </div>
+            <p class="text-gray-600">30 days after job completion: "Who else needs electrical work?"</p>
         </div>
-      </div>
+        
+        <!-- Add Client Form -->
+        <div class="px-8 py-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-100 no-print">
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <input type="text" id="clientName" placeholder="Client Name" class="px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm">
+                <input type="text" id="clientCompany" placeholder="Company" class="px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm">
+                <input type="date" id="lastJobDate" class="px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm">
+                <select id="askedReferral" class="px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm">
+                    <option value="">Asked for Referral?</option>
+                    <option value="Yes">✅ Yes</option>
+                    <option value="No">❌ No</option>
+                </select>
+                <button onclick="addClient()" class="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 transition-all duration-300 font-medium shadow-sm hover:shadow-md">
+                    Add Client
+                </button>
+            </div>
+        </div>
 
-      <!-- Client Table -->
-      <div class="overflow-x-auto">
-        <table class="w-full">
-          <thead class="bg-gray-50">
-            <tr>
-              <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 tracking-wider">Client Name</th>
-              <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 tracking-wider">Company</th>
-              <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 tracking-wider">Last Job Date</th>
-              <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 tracking-wider">Trigger</th>
-              <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 tracking-wider">Asked?</th>
-              <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 tracking-wider">Gave Referral?</th>
-              <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 tracking-wider no-print">Actions</th>
-            </tr>
-          </thead>
-          <tbody id="clientTableBody" class="bg-white divide-y divide-gray-200">
-            <!-- Rows injected dynamically -->
-          </tbody>
-        </table>
-      </div>
+        <!-- Client Table -->
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gradient-to-r from-gray-50 to-gray-100">
+                    <tr>
+                        <th class="px-8 py-4 text-left text-sm font-semibold text-gray-700">Client Name</th>
+                        <th class="px-8 py-4 text-left text-sm font-semibold text-gray-700">Company</th>
+                        <th class="px-8 py-4 text-left text-sm font-semibold text-gray-700">Last Job Date</th>
+                        <th class="px-8 py-4 text-left text-sm font-semibold text-gray-700">Asked for Referral?</th>
+                        <th class="px-8 py-4 text-left text-sm font-semibold text-gray-700">Gave Referral?</th>
+                        <th class="px-8 py-4 text-left text-sm font-semibold text-gray-700 no-print">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="clientTableBody" class="bg-white">
+                    <tr class="table-row border-b border-gray-100">
+                        <td class="px-8 py-5 text-sm font-medium text-gray-900">John Martinez</td>
+                        <td class="px-8 py-5 text-sm text-gray-600">Metro Plaza</td>
+                        <td class="px-8 py-5 text-sm text-gray-600">2024-09-15</td>
+                        <td class="px-8 py-5 text-sm text-gray-600">✅ Yes</td>
+                        <td class="px-8 py-5 text-sm text-green-600 font-medium">🎯 Yes - 2 referrals</td>
+                        <td class="px-8 py-5 text-sm text-gray-500 no-print">
+                            <button class="text-blue-600 hover:text-blue-800 font-medium">Edit</button>
+                        </td>
+                    </tr>
+                    <tr class="table-row border-b border-gray-100">
+                        <td class="px-8 py-5 text-sm font-medium text-gray-900">Sarah Chen</td>
+                        <td class="px-8 py-5 text-sm text-gray-600">Riverside Office</td>
+                        <td class="px-8 py-5 text-sm text-gray-600">2024-09-20</td>
+                        <td class="px-8 py-5 text-sm text-gray-600">✅ Yes</td>
+                        <td class="px-8 py-5 text-sm text-gray-600">❌ No</td>
+                        <td class="px-8 py-5 text-sm text-gray-500 no-print">
+                            <button class="text-blue-600 hover:text-blue-800 font-medium">Edit</button>
+                        </td>
+                    </tr>
+                    <tr class="table-row border-b border-gray-100">
+                        <td class="px-8 py-5 text-sm font-medium text-gray-900">Mike Thompson</td>
+                        <td class="px-8 py-5 text-sm text-gray-600">Downtown Retail</td>
+                        <td class="px-8 py-5 text-sm text-gray-600">2024-10-01</td>
+                        <td class="px-8 py-5 text-sm text-red-600">❌ No</td>
+                        <td class="px-8 py-5 text-sm text-gray-400">-</td>
+                        <td class="px-8 py-5 text-sm text-gray-500 no-print">
+                            <button class="text-blue-600 hover:text-blue-800 font-medium">Edit</button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
     </div>
 
     <!-- Step 2: Partner List -->
-    <div class="bg-white rounded-xl shadow mb-8">
-      <div class="px-6 py-4 border-b border-gray-200">
-        <h2 class="text-xl font-bold">Step 2: STAY in Touch with Partners</h2>
-        <p class="text-gray-600 text-sm">8-touch cadence, repeat quarterly. Keep the pipeline warm.</p>
-      </div>
-
-      <!-- Add Partner / Touch Form -->
-      <div class="px-6 py-4 bg-gray-50 border-b border-gray-200 no-print">
-        <div class="grid grid-cols-1 md:grid-cols-7 gap-3">
-          <input type="text" id="partnerName" placeholder="Partner Contact Name" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-          <input type="text" id="partnerCompany" placeholder="Company" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-          <select id="partnerType" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-            <option value="">Type</option>
-            <option value="GC">General Contractor</option>
-            <option value="PM">Property Manager</option>
-            <option value="Trade">Other Trade</option>
-          </select>
-          <input type="date" id="lastContact" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-          <button id="addPartnerBtn" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors">Add Partner</button>
-          <button id="newTouchBtn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors">Log Touch</button>
-          <div class="flex items-center gap-2">
-            <a href="https://app.buildingconnected.com/" target="_blank" class="px-3 py-2 rounded-lg bg-white shadow text-sm font-medium">BuildingConnected</a>
-            <a href="https://servicechannel.com/suppliers/" target="_blank" class="px-3 py-2 rounded-lg bg-white shadow text-sm font-medium">ServiceChannel</a>
-          </div>
+    <div class="bg-white rounded-2xl card-shadow mb-10 border border-gray-100">
+        <div class="px-8 py-6 border-b border-gray-100">
+            <div class="flex items-center space-x-3 mb-2">
+                <div class="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+                    <span class="text-green-600 font-bold">2</span>
+                </div>
+                <h2 class="text-2xl font-bold text-gray-800">STAY in Touch with Partners</h2>
+            </div>
+            <p class="text-gray-600">Monthly check-ins: "Any projects coming up?"</p>
         </div>
-      </div>
+        
+        <!-- Add Partner Form -->
+        <div class="px-8 py-6 bg-gradient-to-r from-green-50 to-emerald-50 border-b border-gray-100 no-print">
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <input type="text" id="partnerName" placeholder="Partner Name" class="px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white shadow-sm">
+                <input type="text" id="partnerCompany" placeholder="Company" class="px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white shadow-sm">
+                <select id="partnerType" class="px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white shadow-sm">
+                    <option value="">Type</option>
+                    <option value="GC">General Contractor</option>
+                    <option value="PM">Property Manager</option>
+                    <option value="Trade">Other Trade</option>
+                </select>
+                <input type="date" id="lastContact" class="px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white shadow-sm">
+                <button onclick="addPartner()" class="bg-green-600 text-white px-6 py-3 rounded-xl hover:bg-green-700 transition-all duration-300 font-medium shadow-sm hover:shadow-md">
+                    Add Partner
+                </button>
+            </div>
+        </div>
 
-      <!-- Partner Table -->
-      <div class="overflow-x-auto">
-        <table class="w-full">
-          <thead class="bg-gray-50">
-            <tr>
-              <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 tracking-wider">Partner Name</th>
-              <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 tracking-wider">Company</th>
-              <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 tracking-wider">Type</th>
-              <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 tracking-wider">Last Contact</th>
-              <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 tracking-wider">Referrals Sent</th>
-              <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 tracking-wider no-print">Actions</th>
-            </tr>
-          </thead>
-          <tbody id="partnerTableBody" class="bg-white divide-y divide-gray-200"></tbody>
-        </table>
-      </div>
+        <!-- Partner Table -->
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gradient-to-r from-gray-50 to-gray-100">
+                    <tr>
+                        <th class="px-8 py-4 text-left text-sm font-semibold text-gray-700">Partner Name</th>
+                        <th class="px-8 py-4 text-left text-sm font-semibold text-gray-700">Company</th>
+                        <th class="px-8 py-4 text-left text-sm font-semibold text-gray-700">Type</th>
+                        <th class="px-8 py-4 text-left text-sm font-semibold text-gray-700">Last Contact</th>
+                        <th class="px-8 py-4 text-left text-sm font-semibold text-gray-700">Referrals Sent</th>
+                        <th class="px-8 py-4 text-left text-sm font-semibold text-gray-700 no-print">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="partnerTableBody" class="bg-white">
+                    <tr class="table-row border-b border-gray-100">
+                        <td class="px-8 py-5 text-sm font-medium text-gray-900">Dave Wilson</td>
+                        <td class="px-8 py-5 text-sm text-gray-600">BuildRight Construction</td>
+                        <td class="px-8 py-5 text-sm text-gray-500">
+                            <span class="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-medium">GC</span>
+                        </td>
+                        <td class="px-8 py-5 text-sm text-gray-600">2024-10-10</td>
+                        <td class="px-8 py-5 text-sm font-bold text-green-600">5</td>
+                        <td class="px-8 py-5 text-sm text-gray-500 no-print">
+                            <button class="text-green-600 hover:text-green-800 font-medium mr-3">Contact</button>
+                            <button class="text-blue-600 hover:text-blue-800 font-medium">Edit</button>
+                        </td>
+                    </tr>
+                    <tr class="table-row border-b border-gray-100">
+                        <td class="px-8 py-5 text-sm font-medium text-gray-900">Lisa Rodriguez</td>
+                        <td class="px-8 py-5 text-sm text-gray-600">Metro Property Group</td>
+                        <td class="px-8 py-5 text-sm text-gray-500">
+                            <span class="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-medium">PM</span>
+                        </td>
+                        <td class="px-8 py-5 text-sm text-gray-600">2024-10-05</td>
+                        <td class="px-8 py-5 text-sm font-bold text-green-600">3</td>
+                        <td class="px-8 py-5 text-sm text-gray-500 no-print">
+                            <button class="text-green-600 hover:text-green-800 font-medium mr-3">Contact</button>
+                            <button class="text-blue-600 hover:text-blue-800 font-medium">Edit</button>
+                        </td>
+                    </tr>
+                    <tr class="table-row border-b border-gray-100">
+                        <td class="px-8 py-5 text-sm font-medium text-gray-900">Tom Anderson</td>
+                        <td class="px-8 py-5 text-sm text-gray-600">Premier HVAC</td>
+                        <td class="px-8 py-5 text-sm text-gray-500">
+                            <span class="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-xs font-medium">Trade</span>
+                        </td>
+                        <td class="px-8 py-5 text-sm text-gray-600">2024-09-28</td>
+                        <td class="px-8 py-5 text-sm font-bold text-green-600">2</td>
+                        <td class="px-8 py-5 text-sm text-gray-500 no-print">
+                            <button class="text-yellow-600 hover:text-yellow-800 font-medium mr-3">Due Soon</button>
+                            <button class="text-blue-600 hover:text-blue-800 font-medium">Edit</button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
     </div>
 
     <!-- Step 3: This Month's To-Do -->
-    <div class="bg-white rounded-xl shadow">
-      <div class="px-6 py-4 border-b border-gray-200">
-        <h2 class="text-xl font-bold">Step 3: This Month's To-Do</h2>
-        <p class="text-gray-600 text-sm">Auto-generated from due referral prompts, partner touches, and thank-yous.</p>
-      </div>
+    <div class="bg-white rounded-2xl card-shadow border border-gray-100">
+        <div class="px-8 py-6 border-b border-gray-100">
+            <div class="flex items-center space-x-3 mb-2">
+                <div class="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
+                    <span class="text-purple-600 font-bold">3</span>
+                </div>
+                <h2 class="text-2xl font-bold text-gray-800">This Month's To-Do</h2>
+            </div>
+            <p class="text-gray-600">Simple checklist to stay on track</p>
+        </div>
+        
+        <div class="p-8">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <!-- Ask These Clients -->
+                <div class="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-6 border border-blue-100">
+                    <h3 class="font-bold text-gray-800 mb-6 flex items-center space-x-2">
+                        <span class="text-2xl">📞</span>
+                        <span>Ask These 5 Clients for Referrals:</span>
+                    </h3>
+                    <div class="space-y-4">
+                        <label class="flex items-center space-x-3 cursor-pointer">
+                            <input type="checkbox" class="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 focus:ring-2">
+                            <span class="text-sm text-gray-700">Mike Thompson - Downtown Retail</span>
+                        </label>
+                        <label class="flex items-center space-x-3 cursor-pointer">
+                            <input type="checkbox" class="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 focus:ring-2">
+                            <span class="text-sm text-gray-700">Jennifer Park - City Mall</span>
+                        </label>
+                        <label class="flex items-center space-x-3 cursor-pointer">
+                            <input type="checkbox" class="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 focus:ring-2">
+                            <span class="text-sm text-gray-700">Robert Kim - Tech Center</span>
+                        </label>
+                        <label class="flex items-center space-x-3 cursor-pointer">
+                            <input type="checkbox" class="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 focus:ring-2">
+                            <span class="text-sm text-gray-700">Amanda Davis - Medical Plaza</span>
+                        </label>
+                        <label class="flex items-center space-x-3 cursor-pointer">
+                            <input type="checkbox" class="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 focus:ring-2">
+                            <span class="text-sm text-gray-700">Carlos Mendez - Warehouse District</span>
+                        </label>
+                    </div>
+                </div>
 
-      <div class="p-6">
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8" id="todoGrid">
-          <!-- Columns populated dynamically -->
+                <!-- Touch Partners -->
+                <div class="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-6 border border-green-100">
+                    <h3 class="font-bold text-gray-800 mb-6 flex items-center space-x-2">
+                        <span class="text-2xl">🤝</span>
+                        <span>Send Monthly Touch to Partners:</span>
+                    </h3>
+                    <div class="space-y-4">
+                        <label class="flex items-center space-x-3 cursor-pointer">
+                            <input type="checkbox" class="w-5 h-5 text-green-600 rounded focus:ring-green-500 focus:ring-2">
+                            <span class="text-sm text-gray-700">Tom Anderson - Premier HVAC</span>
+                        </label>
+                        <label class="flex items-center space-x-3 cursor-pointer">
+                            <input type="checkbox" class="w-5 h-5 text-green-600 rounded focus:ring-green-500 focus:ring-2">
+                            <span class="text-sm text-gray-700">Steve Johnson - Citywide GC</span>
+                        </label>
+                        <label class="flex items-center space-x-3 cursor-pointer">
+                            <input type="checkbox" class="w-5 h-5 text-green-600 rounded focus:ring-green-500 focus:ring-2">
+                            <span class="text-sm text-gray-700">Maria Santos - Elite Properties</span>
+                        </label>
+                        <label class="flex items-center space-x-3 cursor-pointer">
+                            <input type="checkbox" class="w-5 h-5 text-green-600 rounded focus:ring-green-500 focus:ring-2">
+                            <span class="text-sm text-gray-700">Kevin Brown - Apex Construction</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Thank You Notes -->
+                <div class="bg-gradient-to-br from-purple-50 to-violet-50 rounded-2xl p-6 border border-purple-100">
+                    <h3 class="font-bold text-gray-800 mb-6 flex items-center space-x-2">
+                        <span class="text-2xl">🙏</span>
+                        <span>Send Thank You Notes:</span>
+                    </h3>
+                    <div class="space-y-4 mb-6">
+                        <label class="flex items-center space-x-3 cursor-pointer">
+                            <input type="checkbox" class="w-5 h-5 text-purple-600 rounded focus:ring-purple-500 focus:ring-2">
+                            <span class="text-sm text-gray-700">Dave Wilson - 2 new referrals</span>
+                        </label>
+                        <label class="flex items-center space-x-3 cursor-pointer">
+                            <input type="checkbox" class="w-5 h-5 text-purple-600 rounded focus:ring-purple-500 focus:ring-2">
+                            <span class="text-sm text-gray-700">Lisa Rodriguez - Project intro</span>
+                        </label>
+                        <label class="flex items-center space-x-3 cursor-pointer">
+                            <input type="checkbox" class="w-5 h-5 text-purple-600 rounded focus:ring-purple-500 focus:ring-2">
+                            <span class="text-sm text-gray-700">John Martinez - Positive review</span>
+                        </label>
+                    </div>
+
+                    <!-- Quick Message Template -->
+                    <div class="bg-white/70 backdrop-blur-sm rounded-xl p-4 border border-purple-200">
+                        <h4 class="font-semibold text-gray-800 mb-3 flex items-center space-x-2">
+                            <span>💬</span>
+                            <span>Quick Text Template:</span>
+                        </h4>
+                        <p class="text-sm text-gray-700 italic leading-relaxed">
+                            "Hey [Name], hope the electrical work is running smoothly! Quick question - do you manage other properties or know someone who might need commercial electrical work? Would love an intro."
+                        </p>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="mt-6 no-print">
-          <button id="regenTodos" class="px-3 py-2 rounded-lg bg-white shadow text-sm font-medium">Refresh Tasks</button>
-        </div>
-      </div>
     </div>
-  </main>
+</main>
 
-  <!-- MODALS -->
-  <!-- Create Prompt Modal -->
-  <div id="promptModal" class="fixed inset-0 bg-black/40 hidden items-center justify-center z-40">
-    <div class="bg-white rounded-xl shadow-xl w-full max-w-xl p-6">
-      <div class="flex items-start justify-between">
-        <h3 class="text-lg font-semibold">Create Referral Prompt</h3>
-        <button class="text-gray-400 hover:text-gray-600" onclick="togglePromptModal(false)">✕</button>
-      </div>
-      <div class="mt-4 grid grid-cols-1 gap-3">
-        <input id="pm_clientName" class="px-3 py-2 border rounded-lg" placeholder="Client Name"/>
-        <input id="pm_clientCompany" class="px-3 py-2 border rounded-lg" placeholder="Company"/>
-        <select id="pm_trigger" class="px-3 py-2 border rounded-lg">
-          <option value="job_completed">Job Completed</option>
-          <option value="service_call_success">Service Call Success</option>
-          <option value="multi_location">Multi-location Hint</option>
-          <option value="NPS_9_10">NPS 9–10</option>
-        </select>
-        <input id="pm_channel" class="px-3 py-2 border rounded-lg" placeholder="Channel (email, phone, sms, linkedin)"/>
-        <textarea id="pm_forwardable" class="px-3 py-2 border rounded-lg" rows="4" placeholder="Forwardable intro email (auto generated)"></textarea>
-        <div class="flex gap-2">
-          <button class="px-3 py-2 bg-indigo-600 text-white rounded-lg" onclick="generateForwardable()">Generate Copy</button>
-          <button class="px-3 py-2 bg-blue-600 text-white rounded-lg" onclick="savePrompt()">Save Prompt</button>
-          <button class="px-3 py-2 bg-gray-100 rounded-lg" onclick="copyForwardable()">Copy</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- New Touch Modal -->
-  <div id="touchModal" class="fixed inset-0 bg-black/40 hidden items-center justify-center z-40">
-    <div class="bg-white rounded-xl shadow-xl w-full max-w-xl p-6">
-      <div class="flex items-start justify-between">
-        <h3 class="text-lg font-semibold">Log Partner Touch</h3>
-        <button class="text-gray-400 hover:text-gray-600" onclick="toggleTouchModal(false)">✕</button>
-      </div>
-      <div class="mt-4 grid grid-cols-1 gap-3">
-        <input id="tm_partnerName" class="px-3 py-2 border rounded-lg" placeholder="Partner Contact Name" />
-        <input id="tm_company" class="px-3 py-2 border rounded-lg" placeholder="Company" />
-        <select id="tm_type" class="px-3 py-2 border rounded-lg">
-          <option value="merch_drop">Merch Drop</option>
-          <option value="email">Email</option>
-          <option value="linkedin_dm">LinkedIn DM</option>
-          <option value="call">Call</option>
-          <option value="lunch_and_learn">Lunch & Learn</option>
-          <option value="site_walk">Site Walk</option>
-          <option value="case_study_send">Case Study Send</option>
-          <option value="event_invite">Event Invite</option>
-          <option value="BC_invite">BuildingConnected Invite</option>
-        </select>
-        <input id="tm_asset" class="px-3 py-2 border rounded-lg" placeholder="Asset (link or description)" />
-        <input id="tm_date" type="date" class="px-3 py-2 border rounded-lg" />
-        <div class="flex gap-2">
-          <button class="px-3 py-2 bg-emerald-600 text-white rounded-lg" onclick="saveTouch()">Save Touch</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Settings Modal -->
-  <div id="settingsModal" class="fixed inset-0 bg-black/40 hidden items-center justify-center z-40">
-    <div class="bg-white rounded-xl shadow-xl w-full max-w-xl p-6">
-      <div class="flex items-start justify-between">
-        <h3 class="text-lg font-semibold">Settings</h3>
-        <button class="text-gray-400 hover:text-gray-600" onclick="toggleSettings(false)">✕</button>
-      </div>
-      <div class="mt-4 grid grid-cols-1 gap-3">
-        <input id="xanoBaseUrl" class="px-3 py-2 border rounded-lg" placeholder="Xano Base URL (e.g., https://x8kd-abc-xyz.xano.io/api)" />
-        <input id="xanoApiKey" class="px-3 py-2 border rounded-lg" placeholder="Xano API Key (optional if public)" />
-        <div class="text-sm text-gray-600">If set, the app will POST/GET to the endpoints described in your API: <code>/companies</code>, <code>/contacts</code>, <code>/referral-prompts</code>, <code>/partner-touches</code>, <code>/reviews</code>, <code>/deals</code>, and <code>/dashboard</code>.</div>
-        <div class="flex gap-2">
-          <button class="px-3 py-2 bg-gray-900 text-white rounded-lg" onclick="saveSettings()">Save</button>
-          <button class="px-3 py-2 bg-gray-100 rounded-lg" onclick="testConnection()">Test Connection</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <script>
-    // -------------------------------
-    // Local State (mirrors CSV schemas)
-    // -------------------------------
-    const state = {
-      companies: [],
-      contacts: [],
-      referralPrompts: [],
-      partnerTouches: [],
-      reviews: [],
-      deals: [],
-      activities: [],
-    };
-
-    // -------------------------------
-    // Utils
-    // -------------------------------
-    const $ = (id) => document.getElementById(id);
-
-    function toast(msg, ms = 2000) {
-      const el = $('toast');
-      el.textContent = msg;
-      el.classList.remove('hidden');
-      setTimeout(() => el.classList.add('hidden'), ms);
-    }
-
-    function currency(n) {
-      return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Number(n||0));
-    }
-
-    function formatDate(d) {
-      if (!d) return '—';
-      const dt = new Date(d);
-      if (isNaN(dt)) return d;
-      return dt.toISOString().slice(0,10);
-    }
-
-    function daysFromNow(days = 30) {
-      const d = new Date();
-      d.setDate(d.getDate() + days);
-      return d.toISOString().slice(0,10);
-    }
-
-    // -------------------------------
-    // Settings (Xano)
-    // -------------------------------
-    function loadSettings() {
-      $('xanoBaseUrl').value = localStorage.getItem('xanoBaseUrl') || '';
-      $('xanoApiKey').value = localStorage.getItem('xanoApiKey') || '';
-    }
-
-    function saveSettings() {
-      localStorage.setItem('xanoBaseUrl', $('xanoBaseUrl').value.trim());
-      localStorage.setItem('xanoApiKey', $('xanoApiKey').value.trim());
-      toast('Settings saved');
-      toggleSettings(false);
-    }
-
-    function toggleSettings(show=true) {
-      $('settingsModal').classList.toggle('hidden', !show);
-      $('settingsModal').classList.toggle('flex', show);
-      if (show) loadSettings();
-    }
-
-    async function fetchXano(path, { method='GET', body } = {}) {
-      const base = localStorage.getItem('xanoBaseUrl');
-      const key = localStorage.getItem('xanoApiKey');
-      if (!base) return { ok: false, error: 'No Xano base URL set (using local-only mode).' };
-      try {
-        const res = await fetch(`${base}${path}`, {
-          method,
-          headers: {
-            'Content-Type': 'application/json',
-            ...(key ? { 'Authorization': `Bearer ${key}` } : {})
-          },
-          body: body ? JSON.stringify(body) : undefined,
-        });
-        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-        const data = await res.json().catch(()=>({}));
-        return { ok: true, data };
-      } catch (e) {
-        return { ok: false, error: e.message };
-      }
-    }
-
-    async function testConnection() {
-      const r = await fetchXano('/dashboard');
-      toast(r.ok ? 'Connected to Xano ✓' : `Xano error: ${r.error}`);
-    }
-
-    // -------------------------------
-    // Seed demo rows (remove in prod)
-    // -------------------------------
-    function seedDemo() {
-      state.companies.push({ company_id: 'c1', company_name: 'Metro Plaza', multi_location: true });
-      state.contacts.push({ contact_id: 'p1', company_id: 'c1', full_name: 'John Martinez', role_title: 'Facilities', email: '', phone: '' });
-      state.referralPrompts.push({ prompt_id: 'rp1', company_id: 'c1', contact_id: 'p1', trigger: 'job_completed', date_sent: '2025-09-20', channel: 'email', script_version: 'v1', status: 'sent', follow_up_date: '2025-09-27' });
-      state.deals.push({ deal_id: 'd1', source_type: 'Referral', source_contact_id: 'p1', source_company_id: 'c1', opportunity_company: 'City Mall', opportunity_type: 'Remodeling', estimated_value: 55000, stage: 'Won', closed_date: '2025-10-02' });
-
-      state.companies.push({ company_id: 'c2', company_name: 'Riverside Office', multi_location: false });
-      state.contacts.push({ contact_id: 'p2', company_id: 'c2', full_name: 'Sarah Chen' });
-
-      state.companies.push({ company_id: 'c3', company_name: 'BuildRight Construction' });
-      state.contacts.push({ contact_id: 'p3', company_id: 'c3', full_name: 'Dave Wilson' });
-      state.partnerTouches.push({ touch_id: 't1', company_id: 'c3', contact_id: 'p3', date: '2025-10-01', touch_type: 'email' });
-      state.deals.push({ deal_id: 'd2', source_type: 'Partner', source_contact_id: 'p3', source_company_id: 'c3', opportunity_company: 'RetailFit', opportunity_type: 'New Construction', estimated_value: 72000, stage: 'Referred' });
-    }
-
-    // -------------------------------
-    // Rendering (Clients)
-    // -------------------------------
-    function renderClients() {
-      const body = $('clientTableBody');
-      body.innerHTML = '';
-
-      // Merge contacts by company_id for a simple grid (last job date stored on contact for demo)
-      const rows = state.contacts.map(ct => {
-        const comp = state.companies.find(c => c.company_id === ct.company_id) || {};        
-        // Find prompt status for this contact
-        const pr = state.referralPrompts.filter(p => p.contact_id === ct.contact_id).sort((a,b)=> (b.date_sent||'').localeCompare(a.date_sent||''))[0];
-        const asked = pr ? (pr.status === 'sent' || pr.status === 'accepted' ? '✅ Yes' : '❌ No') : '❌ No';
-        // Count referrals from this contact
-        const deals = state.deals.filter(d => (d.source_contact_id === ct.contact_id) && (d.source_type === 'Referral'));
-        const gave = deals.length ? `🎯 Yes - ${deals.length} referral${deals.length>1?'s':''}` : '—';
-        return {
-          name: ct.full_name || '—',
-          company: comp.company_name || '—',
-          date: ct.last_job_date || '—',
-          trigger: pr?.trigger || '—',
-          asked, gave,
-          contact_id: ct.contact_id,
-          company_id: ct.company_id,
-        };
-      });
-
-      rows.forEach(r => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${r.name}</td>
-          <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${r.company}</td>
-          <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${r.date}</td>
-          <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${r.trigger}</td>
-          <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${r.asked}</td>
-          <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${r.gave}</td>
-          <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 no-print flex gap-2">
-            <button class="text-indigo-600 hover:text-indigo-900" onclick="openEmail('${r.contact_id}')">Intro Email</button>
-            <button class="text-blue-600 hover:text-blue-900" onclick="openPromptFromRow('${r.contact_id}')">Prompt</button>
-            <button class="text-green-600 hover:text-green-900" onclick="markIntro('${r.contact_id}')">Mark Intro</button>
-          </td>`;
-        body.appendChild(tr);
-      });
-
-      updateStats();
-    }
-
-    // -------------------------------
-    // Rendering (Partners)
-    // -------------------------------
-    function renderPartners() {
-      const body = $('partnerTableBody');
-      body.innerHTML = '';
-
-      // Derive partner contacts by type on company (simplified)
-      const partnerContacts = state.contacts.filter(c => ['GC','PM','Trade'].includes(c.type));
-      partnerContacts.forEach(ct => {
-        const comp = state.companies.find(c => c.company_id === ct.company_id) || {};
-        const type = ct.type || '—';
-        const typeColors = { GC: 'bg-blue-100 text-blue-800', PM: 'bg-green-100 text-green-800', Trade: 'bg-purple-100 text-purple-800' };
-        const lastTouch = state.partnerTouches.filter(t => t.contact_id === ct.contact_id).sort((a,b)=> (b.date||'').localeCompare(a.date||''))[0]?.date || '—';
-        const referralsSent = state.deals.filter(d => d.source_type === 'Partner' && d.source_contact_id === ct.contact_id).length;
-
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${ct.full_name || '—'}</td>
-          <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${comp.company_name || '—'}</td>
-          <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><span class="${typeColors[type] || 'bg-gray-100'} px-2 py-1 rounded-full text-xs">${type}</span></td>
-          <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${formatDate(lastTouch)}</td>
-          <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">${referralsSent}</td>
-          <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 no-print flex gap-2">
-            <button class="text-emerald-600 hover:text-emerald-900" onclick="toggleTouchModal(true, '${ct.contact_id}')">Log Touch</button>
-            <button class="text-blue-600 hover:text-blue-900" onclick="editPartner('${ct.contact_id}')">Edit</button>
-          </td>`;
-        body.appendChild(tr);
-      });
-
-      computeBestPartner();
-    }
-
-    // -------------------------------
-    // Rendering (Todos)
-    // -------------------------------
-    function renderTodos() {
-      const grid = $('todoGrid');
-      grid.innerHTML = '';
-
-      // Ask These Clients: due when 30 days after last job date or explicit follow_up_date
-      const dueAsks = state.contacts.filter(ct => {
-        const last = ct.last_job_date ? new Date(ct.last_job_date) : null;
-        if (!last) return false;
-        const due = new Date(last);
-        due.setDate(due.getDate() + 30);
-        return due <= new Date();
-      }).slice(0, 5);
-
-      // Touch Partners: last contact older than 30 days
-      const partnerContacts = state.contacts.filter(c => ['GC','PM','Trade'].includes(c.type));
-      const duePartners = partnerContacts.filter(ct => {
-        const last = state.partnerTouches.filter(t => t.contact_id === ct.contact_id).sort((a,b)=> (b.date||'').localeCompare(a.date||''))[0]?.date;
-        if (!last) return true;
-        const lastDate = new Date(last);
-        const days = (Date.now() - lastDate.getTime())/(1000*60*60*24);
-        return days >= 30;
-      }).slice(0, 5);
-
-      // Thank you notes: any new deals marked referred in past 30 days
-      const cutoff = new Date();
-      cutoff.setDate(cutoff.getDate() - 30);
-      const thankYous = state.deals.filter(d => d.source_type && (new Date(d.created_at || d.closed_date || Date.now()) >= cutoff)).slice(0, 5);
-
-      const col = (title, emoji, items, accessor) => `
-        <div>
-          <h3 class="font-semibold text-gray-800 mb-4">${emoji} ${title}</h3>
-          <div class="space-y-3">
-            ${items.map(i => `
-              <label class="flex items-center gap-3">
-                <input type="checkbox" class="w-4 h-4 rounded">
-                <span class="text-sm">${accessor(i)}</span>
-              </label>
-            `).join('') || '<p class="text-sm text-gray-500">No items due.</p>'}
-          </div>
-        </div>`;
-
-      grid.insertAdjacentHTML('beforeend', col("Ask These 5 Clients for Referrals:", '📞', dueAsks, (c)=> `${c.full_name || '—'} - ${(state.companies.find(x=>x.company_id===c.company_id)||{}).company_name || '—'}`));
-      grid.insertAdjacentHTML('beforeend', col('Send Monthly Touch to Partners:', '🤝', duePartners, (c)=> `${c.full_name || '—'} - ${(state.companies.find(x=>x.company_id===c.company_id)||{}).company_name || '—'}`));
-      grid.insertAdjacentHTML('beforeend', col('Send Thank You Notes:', '🙏', thankYous, (d)=> `${(state.contacts.find(x=>x.contact_id===d.source_contact_id)||{}).full_name || 'Partner/Client'} - ${d.opportunity_company || '—'}`));
-    }
-
-    // -------------------------------
-    // Stats
-    // -------------------------------
-    function updateStats() {
-      const totalClients = state.contacts.length;
-      const askedClients = state.referralPrompts.reduce((acc, p) => acc.add(p.contact_id), new Set()).size;
-      const pct = totalClients ? Math.round((askedClients / totalClients) * 100) : 0;
-      $('clientsAskedStat').textContent = `${askedClients} of ${totalClients}`;
-      $('clientsAskedPercent').textContent = `${pct}%`;
-
-      const thisMonth = new Date().toISOString().slice(0,7); // YYYY-MM
-      const referralsReceived = state.deals.filter(d => (d.source_type === 'Referral') && ((d.created_at || d.closed_date || '').startsWith(thisMonth))).length;
-      $('referralsReceived').textContent = referralsReceived;
-
-      const quarter = Math.floor((new Date().getMonth())/3);
-      const year = new Date().getFullYear();
-      const monthsInQ = [0,1,2].map(m => String(quarter*3 + m + 1).padStart(2,'0'));
-      const revenue = state.deals.filter(d => d.stage === 'Won' && d.source_type === 'Referral' && d.closed_date && d.closed_date.startsWith(`${year}-`)).filter(d => monthsInQ.includes(d.closed_date.slice(5,7))).reduce((s,d)=> s + Number(d.estimated_value||0), 0);
-      $('referralRevenue').textContent = currency(revenue);
-    }
-
-    function computeBestPartner() {
-      const counts = {};
-      state.deals.filter(d => d.source_type === 'Partner').forEach(d => {
-        const compId = d.source_company_id || 'unknown';
-        counts[compId] = (counts[compId] || 0) + 1;
-      });
-      let best = Object.entries(counts).sort((a,b)=> b[1]-a[1])[0];
-      if (!best) { $('bestPartner').textContent = '—'; $('bestPartnerCount').textContent = '0 referrals'; return; }
-      const comp = state.companies.find(c => c.company_id === best[0]);
-      $('bestPartner').textContent = comp?.company_name || '—';
-      $('bestPartnerCount').textContent = `${best[1]} referral${best[1]>1?'s':''}`;
-    }
-
-    // -------------------------------
-    // Actions
-    // -------------------------------
+<script>
+    // Add Client Function
     function addClient() {
-      const name = $('clientName').value.trim();
-      const companyName = $('clientCompany').value.trim();
-      const date = $('lastJobDate').value;
-      const asked = $('askedReferral').value;
-      const trigger = $('askTrigger').value || 'job_completed';
-      if (!name || !companyName || !date) return toast('Please fill name, company, and last job date.');
-
-      const company_id = `c_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
-      const contact_id = `p_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
-
-      state.companies.push({ company_id, company_name: companyName });
-      state.contacts.push({ contact_id, company_id, full_name: name, last_job_date: date });
-
-      if (asked === 'Yes') {
-        state.referralPrompts.push({ prompt_id: `rp_${Date.now()}`, company_id, contact_id, trigger, date_sent: new Date().toISOString().slice(0,10), channel: 'email', status: 'sent', follow_up_date: daysFromNow(7) });
-      }
-
-      $('clientName').value = '';
-      $('clientCompany').value = '';
-      $('lastJobDate').value = '';
-      $('askedReferral').value = '';
-      $('askTrigger').value = '';
-
-      renderClients();
-      renderTodos();
-      toast('Client added');
+        const name = document.getElementById('clientName').value;
+        const company = document.getElementById('clientCompany').value;
+        const date = document.getElementById('lastJobDate').value;
+        const asked = document.getElementById('askedReferral').value;
+        
+        if (name && company && date) {
+            const tableBody = document.getElementById('clientTableBody');
+            const newRow = document.createElement('tr');
+            newRow.innerHTML = `
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${name}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${company}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${date}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${asked || '❌ No'}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">-</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 no-print">
+                    <button class="text-blue-600 hover:text-blue-900">Edit</button>
+                </td>
+            `;
+            tableBody.appendChild(newRow);
+            
+            // Clear form
+            document.getElementById('clientName').value = '';
+            document.getElementById('clientCompany').value = '';
+            document.getElementById('lastJobDate').value = '';
+            document.getElementById('askedReferral').value = '';
+            
+            updateStats();
+        }
     }
 
+    // Add Partner Function
     function addPartner() {
-      const name = $('partnerName').value.trim();
-      const companyName = $('partnerCompany').value.trim();
-      const type = $('partnerType').value;
-      const contactDate = $('lastContact').value;
-      if (!name || !companyName || !type) return toast('Fill partner name, company, and type.');
-
-      const company_id = `c_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
-      const contact_id = `p_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
-
-      state.companies.push({ company_id, company_name: companyName });
-      state.contacts.push({ contact_id, company_id, full_name: name, type });
-      if (contactDate) state.partnerTouches.push({ touch_id: `t_${Date.now()}`, company_id, contact_id, date: contactDate, touch_type: 'call' });
-
-      $('partnerName').value = '';
-      $('partnerCompany').value = '';
-      $('partnerType').value = '';
-      $('lastContact').value = '';
-
-      renderPartners();
-      renderTodos();
-      toast('Partner added');
+        const name = document.getElementById('partnerName').value;
+        const company = document.getElementById('partnerCompany').value;
+        const type = document.getElementById('partnerType').value;
+        const contact = document.getElementById('lastContact').value;
+        
+        if (name && company && type) {
+            const tableBody = document.getElementById('partnerTableBody');
+            const newRow = document.createElement('tr');
+            const typeColors = {
+                'GC': 'bg-blue-100 text-blue-800',
+                'PM': 'bg-green-100 text-green-800',
+                'Trade': 'bg-purple-100 text-purple-800'
+            };
+            
+            newRow.innerHTML = `
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${name}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${company}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <span class="${typeColors[type]} px-2 py-1 rounded-full text-xs">${type}</span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${contact || 'Not contacted'}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">0</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 no-print">
+                    <button class="text-green-600 hover:text-green-900 mr-2">Contact</button>
+                    <button class="text-blue-600 hover:text-blue-900">Edit</button>
+                </td>
+            `;
+            tableBody.appendChild(newRow);
+            
+            // Clear form
+            document.getElementById('partnerName').value = '';
+            document.getElementById('partnerCompany').value = '';
+            document.getElementById('partnerType').value = '';
+            document.getElementById('lastContact').value = '';
+        }
     }
 
-    function openPromptFromRow(contact_id) {
-      const ct = state.contacts.find(c => c.contact_id === contact_id);
-      const comp = state.companies.find(c => c.company_id === ct?.company_id);
-      if (!ct) return;
-      togglePromptModal(true);
-      $('pm_clientName').value = ct.full_name || '';
-      $('pm_clientCompany').value = comp?.company_name || '';
-      $('pm_trigger').value = 'job_completed';
-      $('pm_channel').value = 'email';
-      $('pm_forwardable').value = generateForwardableText(ct.full_name || '', comp?.company_name || '');
-    }
-
-    function markIntro(contact_id) {
-      // Create a referred deal stub for stats and thank-yous
-      const ct = state.contacts.find(c => c.contact_id === contact_id);
-      if (!ct) return;
-      state.deals.push({ deal_id: `d_${Date.now()}`, source_type: 'Referral', source_contact_id: contact_id, source_company_id: ct.company_id, opportunity_company: '—', stage: 'Referred', created_at: new Date().toISOString().slice(0,10) });
-      updateStats();
-      renderClients();
-      renderTodos();
-      toast('Intro recorded ✓');
-    }
-
-    function openEmail(contact_id) {
-      const ct = state.contacts.find(c => c.contact_id === contact_id);
-      const comp = state.companies.find(c => c.company_id === ct?.company_id);
-      const body = encodeURIComponent(generateForwardableText(ct?.full_name||'', comp?.company_name||''));
-      window.open(`mailto:?subject=Quick intro – Electrical support&body=${body}`, '_blank');
-    }
-
-    // -------------------------------
-    // Prompt Modal helpers
-    // -------------------------------
-    function togglePromptModal(show=true) {
-      $('promptModal').classList.toggle('hidden', !show);
-      $('promptModal').classList.toggle('flex', show);
-    }
-
-    function generateForwardableText(clientName, companyName) {
-      return `Hi [HQ Contact],\n\nWe’ve been working with JPRO at ${companyName} and they were responsive and precise. Could you take 15 minutes with Jose’s team to see if they can support your portfolio?\n\nJPRO contact: info@jprosolutions.co | (470) 514-1009.\n\nThanks!`;
-    }
-
-    function generateForwardable() {
-      const txt = generateForwardableText($('pm_clientName').value.trim(), $('pm_clientCompany').value.trim());
-      $('pm_forwardable').value = txt;
-    }
-
-    function copyForwardable() {
-      const ta = $('pm_forwardable');
-      ta.select();
-      document.execCommand('copy');
-      toast('Copied to clipboard');
-    }
-
-    async function savePrompt() {
-      const name = $('pm_clientName').value.trim();
-      const comp = $('pm_clientCompany').value.trim();
-      const trigger = $('pm_trigger').value;
-      const channel = $('pm_channel').value.trim() || 'email';
-      if (!name || !comp) return toast('Client name & company required');
-
-      // Ensure company/contact exist locally
-      let company = state.companies.find(c => c.company_name.toLowerCase() === comp.toLowerCase());
-      if (!company) { company = { company_id: `c_${Date.now()}`, company_name: comp }; state.companies.push(company); }
-      let contact = state.contacts.find(c => c.full_name.toLowerCase() === name.toLowerCase() && c.company_id === company.company_id);
-      if (!contact) { contact = { contact_id: `p_${Date.now()}`, company_id: company.company_id, full_name: name }; state.contacts.push(contact); }
-
-      const prompt = { prompt_id: `rp_${Date.now()}`, company_id: company.company_id, contact_id: contact.contact_id, trigger, date_sent: new Date().toISOString().slice(0,10), channel, status: 'sent', follow_up_date: daysFromNow(7) };
-      state.referralPrompts.push(prompt);
-
-      // Try POST to Xano
-      const r = await fetchXano('/referral-prompts', { method: 'POST', body: prompt });
-      if (!r.ok && localStorage.getItem('xanoBaseUrl')) toast(`Xano: ${r.error}`); else if (r.ok) toast('Saved to Xano ✓');
-
-      togglePromptModal(false);
-      renderClients();
-      renderTodos();
-    }
-
-    // -------------------------------
-    // Touch Modal helpers
-    // -------------------------------
-    function toggleTouchModal(show=true, contact_id=null) {
-      $('touchModal').classList.toggle('hidden', !show);
-      $('touchModal').classList.toggle('flex', show);
-      $('tm_partnerName').dataset.contact = contact_id || '';
-    }
-
-    async function saveTouch() {
-      const name = $('tm_partnerName').value.trim();
-      const compName = $('tm_company').value.trim();
-      const type = $('tm_type').value;
-      const asset = $('tm_asset').value.trim();
-      const date = $('tm_date').value || new Date().toISOString().slice(0,10);
-      if (!name || !compName || !type) return toast('Name, company, and touch type required');
-
-      let company = state.companies.find(c => c.company_name.toLowerCase() === compName.toLowerCase());
-      if (!company) { company = { company_id: `c_${Date.now()}`, company_name: compName }; state.companies.push(company); }
-      let contact = state.contacts.find(c => c.full_name.toLowerCase() === name.toLowerCase() && c.company_id === company.company_id);
-      if (!contact) { contact = { contact_id: `p_${Date.now()}`, company_id: company.company_id, full_name: name, type: 'GC' }; state.contacts.push(contact); }
-
-      const touch = { touch_id: `t_${Date.now()}`, company_id: company.company_id, contact_id: contact.contact_id, date, touch_type: type, asset_used: asset };
-      state.partnerTouches.push(touch);
-
-      const r = await fetchXano('/partner-touches', { method: 'POST', body: touch });
-      if (!r.ok && localStorage.getItem('xanoBaseUrl')) toast(`Xano: ${r.error}`); else if (r.ok) toast('Saved to Xano ✓');
-
-      toggleTouchModal(false);
-      renderPartners();
-      renderTodos();
-    }
-
-    // -------------------------------
-    // Export / Import CSVs (simple)
-    // -------------------------------
-    function toCSV(rows, headers) {
-      const esc = (v) => '"' + String(v ?? '').replace(/"/g,'""') + '"';
-      return [headers.join(','), ...rows.map(r => headers.map(h => esc(r[h])).join(','))].join('\n');
-    }
-
-    function download(name, text) {
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
-      a.download = name;
-      a.click();
-    }
-
-    $('exportBtn')?.addEventListener('click', ()=>{
-      download('companies.csv', toCSV(state.companies, ["company_id","company_name","multi_location"]));
-      download('contacts.csv', toCSV(state.contacts, ["contact_id","company_id","full_name","role_title","email","phone","type","last_job_date"]));
-      download('referral_prompts.csv', toCSV(state.referralPrompts, ["prompt_id","company_id","contact_id","trigger","date_sent","channel","status","follow_up_date"]));
-      download('partner_touches.csv', toCSV(state.partnerTouches, ["touch_id","company_id","contact_id","date","touch_type","asset_used"]));
-      download('deals.csv', toCSV(state.deals, ["deal_id","source_type","source_contact_id","source_company_id","opportunity_company","opportunity_type","estimated_value","stage","created_at","closed_date"]));
-    });
-
-    $('importInput')?.addEventListener('change', async (e)=>{
-      const files = Array.from(e.target.files || []);
-      if (!files.length) return;
-      for (const f of files) {
-        const text = await f.text();
-        const [header, ...lines] = text.split(/\r?\n/).filter(Boolean);
-        const cols = header.split(',').map(h => h.replace(/^"|"$/g,''));
-        const rows = lines.map(line => {
-          const cells = line.match(/("(?:[^"]|"")*"|[^,]+)/g)?.map(c => c.replace(/^"|"$/g,'').replace(/""/g,'"')) || [];
-          return Object.fromEntries(cols.map((c,i)=> [c, cells[i]]));
+    // Update Stats
+    function updateStats() {
+        const clientRows = document.querySelectorAll('#clientTableBody tr');
+        let totalClients = clientRows.length;
+        let askedClients = 0;
+        
+        clientRows.forEach(row => {
+            const askedCell = row.cells[3].textContent;
+            if (askedCell.includes('✅ Yes')) {
+                askedClients++;
+            }
         });
-        // naive routing by filename
-        if (f.name.includes('companies')) state.companies = rows;
-        else if (f.name.includes('contacts')) state.contacts = rows;
-        else if (f.name.includes('referral_prompts')) state.referralPrompts = rows;
-        else if (f.name.includes('partner_touches')) state.partnerTouches = rows;
-        else if (f.name.includes('deals')) state.deals = rows.map(r=> ({...r, estimated_value: Number(r.estimated_value||0)}));
-      }
-      renderClients();
-      renderPartners();
-      renderTodos();
-      toast('Import complete');
+        
+        const percentage = totalClients > 0 ? Math.round((askedClients / totalClients) * 100) : 0;
+        
+        document.getElementById('clientsAskedStat').textContent = `${askedClients} of ${totalClients}`;
+        document.getElementById('clientsAskedPercent').textContent = `${percentage}%`;
+    }
+
+    // Initialize stats on page load
+    updateStats();
+
+    // Add click handlers for action buttons
+    document.querySelectorAll('button').forEach(button => {
+        if (button.textContent.includes('Contact') || button.textContent.includes('Edit')) {
+            button.addEventListener('click', (e) => {
+                e.preventDefault();
+                const originalText = button.textContent;
+                button.textContent = 'Done ✓';
+                button.classList.add('text-green-600');
+                
+                setTimeout(() => {
+                    button.textContent = originalText;
+                    button.classList.remove('text-green-600');
+                }, 2000);
+            });
+        }
     });
 
-    // -------------------------------
-    // Event wiring
-    // -------------------------------
-    $('addClientBtn').addEventListener('click', addClient);
-    $('createPromptBtn').addEventListener('click', ()=> togglePromptModal(true));
-    $('addPartnerBtn').addEventListener('click', addPartner);
-    $('newTouchBtn').addEventListener('click', ()=> toggleTouchModal(true));
-    $('openSettings').addEventListener('click', ()=> toggleSettings(true));
-    $('regenTodos').addEventListener('click', renderTodos);
-
-    // -------------------------------
-    // Init
-    // -------------------------------
-    (function init(){
-      seedDemo();
-      renderClients();
-      renderPartners();
-      renderTodos();
-    })();
-  </script>
-</body>
-</html>
+    // Checkbox functionality for to-do items
+    document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            const label = this.nextElementSibling;
+            if (this.checked) {
+                label.classList.add('line-through', 'text-gray-400');
+            } else {
+                label.classList.remove('line-through', 'text-gray-400');
+            }
+        });
+    });
+</script>

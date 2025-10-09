@@ -1,0 +1,406 @@
+```html
+<main class="max-w-7xl mx-auto px-4 py-8">
+    <!-- Quick Stats Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div class="bg-white rounded-xl shadow-md p-6">
+            <div class="text-center">
+                <p class="text-gray-500 text-sm font-medium">Clients Asked</p>
+                <p class="text-3xl font-bold text-blue-600" id="clientsAskedStat">12 of 15</p>
+                <p class="text-sm text-blue-500" id="clientsAskedPercent">80%</p>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-md p-6">
+            <div class="text-center">
+                <p class="text-gray-500 text-sm font-medium">Referrals Received</p>
+                <p class="text-3xl font-bold text-green-600" id="referralsReceived">8</p>
+                <p class="text-sm text-green-500">This month</p>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-md p-6">
+            <div class="text-center">
+                <p class="text-gray-500 text-sm font-medium">Referral Revenue</p>
+                <p class="text-3xl font-bold text-purple-600" id="referralRevenue">$127K</p>
+                <p class="text-sm text-purple-500">This quarter</p>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-md p-6">
+            <div class="text-center">
+                <p class="text-gray-500 text-sm font-medium">Best Partner</p>
+                <p class="text-lg font-bold text-orange-600" id="bestPartner">BuildRight GC</p>
+                <p class="text-sm text-orange-500" id="bestPartnerCount">5 referrals</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Step 1: Client Tracker -->
+    <div class="bg-white rounded-xl shadow-md mb-8">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-xl font-bold text-gray-800">Step 1: ASK Every Client</h2>
+            <p class="text-gray-600 text-sm">30 days after job completion: "Who else needs electrical work?"</p>
+        </div>
+        
+        <!-- Add Client Form -->
+        <div class="px-6 py-4 bg-gray-50 border-b border-gray-200 no-print">
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <input type="text" id="clientName" placeholder="Client Name" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                <input type="text" id="clientCompany" placeholder="Company" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                <input type="date" id="lastJobDate" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                <select id="askedReferral" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    <option value="">Asked for Referral?</option>
+                    <option value="Yes">✅ Yes</option>
+                    <option value="No">❌ No</option>
+                </select>
+                <button onclick="addClient()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                    Add Client
+                </button>
+            </div>
+        </div>
+
+        <!-- Client Table -->
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client Name</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Company</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Job Date</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Asked for Referral?</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gave Referral?</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider no-print">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="clientTableBody" class="bg-white divide-y divide-gray-200">
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">John Martinez</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Metro Plaza</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">2024-09-15</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">✅ Yes</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">🎯 Yes - 2 referrals</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 no-print">
+                            <button class="text-blue-600 hover:text-blue-900">Edit</button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">Sarah Chen</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Riverside Office</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">2024-09-20</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">✅ Yes</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">❌ No</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 no-print">
+                            <button class="text-blue-600 hover:text-blue-900">Edit</button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">Mike Thompson</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Downtown Retail</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">2024-10-01</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">❌ No</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">-</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 no-print">
+                            <button class="text-blue-600 hover:text-blue-900">Edit</button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Step 2: Partner List -->
+    <div class="bg-white rounded-xl shadow-md mb-8">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-xl font-bold text-gray-800">Step 2: STAY in Touch with Partners</h2>
+            <p class="text-gray-600 text-sm">Monthly check-ins: "Any projects coming up?"</p>
+        </div>
+        
+        <!-- Add Partner Form -->
+        <div class="px-6 py-4 bg-gray-50 border-b border-gray-200 no-print">
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <input type="text" id="partnerName" placeholder="Partner Name" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                <input type="text" id="partnerCompany" placeholder="Company" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                <select id="partnerType" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    <option value="">Type</option>
+                    <option value="GC">General Contractor</option>
+                    <option value="PM">Property Manager</option>
+                    <option value="Trade">Other Trade</option>
+                </select>
+                <input type="date" id="lastContact" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                <button onclick="addPartner()" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors">
+                    Add Partner
+                </button>
+            </div>
+        </div>
+
+        <!-- Partner Table -->
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Partner Name</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Company</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Contact</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Referrals Sent</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider no-print">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="partnerTableBody" class="bg-white divide-y divide-gray-200">
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">Dave Wilson</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">BuildRight Construction</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs">GC</span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">2024-10-10</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">5</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 no-print">
+                            <button class="text-green-600 hover:text-green-900 mr-2">Contact</button>
+                            <button class="text-blue-600 hover:text-blue-900">Edit</button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">Lisa Rodriguez</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Metro Property Group</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            <span class="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs">PM</span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">2024-10-05</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">3</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 no-print">
+                            <button class="text-green-600 hover:text-green-900 mr-2">Contact</button>
+                            <button class="text-blue-600 hover:text-blue-900">Edit</button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">Tom Anderson</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Premier HVAC</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            <span class="bg-purple-100 text-purple-800 px-2 py-1 rounded-full text-xs">Trade</span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">2024-09-28</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">2</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 no-print">
+                            <button class="text-yellow-600 hover:text-yellow-900 mr-2">Due Soon</button>
+                            <button class="text-blue-600 hover:text-blue-900">Edit</button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Step 3: This Month's To-Do -->
+    <div class="bg-white rounded-xl shadow-md">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-xl font-bold text-gray-800">Step 3: This Month's To-Do</h2>
+            <p class="text-gray-600 text-sm">Simple checklist to stay on track</p>
+        </div>
+        
+        <div class="p-6">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <!-- Ask These Clients -->
+                <div>
+                    <h3 class="font-semibold text-gray-800 mb-4">📞 Ask These 5 Clients for Referrals:</h3>
+                    <div class="space-y-3">
+                        <label class="flex items-center space-x-3">
+                            <input type="checkbox" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500">
+                            <span class="text-sm">Mike Thompson - Downtown Retail</span>
+                        </label>
+                        <label class="flex items-center space-x-3">
+                            <input type="checkbox" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500">
+                            <span class="text-sm">Jennifer Park - City Mall</span>
+                        </label>
+                        <label class="flex items-center space-x-3">
+                            <input type="checkbox" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500">
+                            <span class="text-sm">Robert Kim - Tech Center</span>
+                        </label>
+                        <label class="flex items-center space-x-3">
+                            <input type="checkbox" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500">
+                            <span class="text-sm">Amanda Davis - Medical Plaza</span>
+                        </label>
+                        <label class="flex items-center space-x-3">
+                            <input type="checkbox" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500">
+                            <span class="text-sm">Carlos Mendez - Warehouse District</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Touch Partners -->
+                <div>
+                    <h3 class="font-semibold text-gray-800 mb-4">🤝 Send Monthly Touch to Partners:</h3>
+                    <div class="space-y-3">
+                        <label class="flex items-center space-x-3">
+                            <input type="checkbox" class="w-4 h-4 text-green-600 rounded focus:ring-green-500">
+                            <span class="text-sm">Tom Anderson - Premier HVAC</span>
+                        </label>
+                        <label class="flex items-center space-x-3">
+                            <input type="checkbox" class="w-4 h-4 text-green-600 rounded focus:ring-green-500">
+                            <span class="text-sm">Steve Johnson - Citywide GC</span>
+                        </label>
+                        <label class="flex items-center space-x-3">
+                            <input type="checkbox" class="w-4 h-4 text-green-600 rounded focus:ring-green-500">
+                            <span class="text-sm">Maria Santos - Elite Properties</span>
+                        </label>
+                        <label class="flex items-center space-x-3">
+                            <input type="checkbox" class="w-4 h-4 text-green-600 rounded focus:ring-green-500">
+                            <span class="text-sm">Kevin Brown - Apex Construction</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Thank You Notes -->
+                <div>
+                    <h3 class="font-semibold text-gray-800 mb-4">🙏 Send Thank You Notes:</h3>
+                    <div class="space-y-3">
+                        <label class="flex items-center space-x-3">
+                            <input type="checkbox" class="w-4 h-4 text-purple-600 rounded focus:ring-purple-500">
+                            <span class="text-sm">Dave Wilson - 2 new referrals</span>
+                        </label>
+                        <label class="flex items-center space-x-3">
+                            <input type="checkbox" class="w-4 h-4 text-purple-600 rounded focus:ring-purple-500">
+                            <span class="text-sm">Lisa Rodriguez - Project intro</span>
+                        </label>
+                        <label class="flex items-center space-x-3">
+                            <input type="checkbox" class="w-4 h-4 text-purple-600 rounded focus:ring-purple-500">
+                            <span class="text-sm">John Martinez - Positive review</span>
+                        </label>
+                    </div>
+
+                    <!-- Quick Message Template -->
+                    <div class="mt-6 p-4 bg-gray-50 rounded-lg">
+                        <h4 class="font-medium text-gray-800 mb-2">Quick Text Template:</h4>
+                        <p class="text-sm text-gray-600 italic">
+                            "Hey [Name], hope the electrical work is running smoothly! Quick question - do you manage other properties or know someone who might need commercial electrical work? Would love an intro."
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script>
+    // Add Client Function
+    function addClient() {
+        const name = document.getElementById('clientName').value;
+        const company = document.getElementById('clientCompany').value;
+        const date = document.getElementById('lastJobDate').value;
+        const asked = document.getElementById('askedReferral').value;
+        
+        if (name && company && date) {
+            const tableBody = document.getElementById('clientTableBody');
+            const newRow = document.createElement('tr');
+            newRow.innerHTML = `
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${name}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${company}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${date}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${asked || '❌ No'}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">-</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 no-print">
+                    <button class="text-blue-600 hover:text-blue-900">Edit</button>
+                </td>
+            `;
+            tableBody.appendChild(newRow);
+            
+            // Clear form
+            document.getElementById('clientName').value = '';
+            document.getElementById('clientCompany').value = '';
+            document.getElementById('lastJobDate').value = '';
+            document.getElementById('askedReferral').value = '';
+            
+            updateStats();
+        }
+    }
+
+    // Add Partner Function
+    function addPartner() {
+        const name = document.getElementById('partnerName').value;
+        const company = document.getElementById('partnerCompany').value;
+        const type = document.getElementById('partnerType').value;
+        const contact = document.getElementById('lastContact').value;
+        
+        if (name && company && type) {
+            const tableBody = document.getElementById('partnerTableBody');
+            const newRow = document.createElement('tr');
+            const typeColors = {
+                'GC': 'bg-blue-100 text-blue-800',
+                'PM': 'bg-green-100 text-green-800',
+                'Trade': 'bg-purple-100 text-purple-800'
+            };
+            
+            newRow.innerHTML = `
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${name}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${company}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <span class="${typeColors[type]} px-2 py-1 rounded-full text-xs">${type}</span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${contact || 'Not contacted'}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">0</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 no-print">
+                    <button class="text-green-600 hover:text-green-900 mr-2">Contact</button>
+                    <button class="text-blue-600 hover:text-blue-900">Edit</button>
+                </td>
+            `;
+            tableBody.appendChild(newRow);
+            
+            // Clear form
+            document.getElementById('partnerName').value = '';
+            document.getElementById('partnerCompany').value = '';
+            document.getElementById('partnerType').value = '';
+            document.getElementById('lastContact').value = '';
+        }
+    }
+
+    // Update Stats
+    function updateStats() {
+        const clientRows = document.querySelectorAll('#clientTableBody tr');
+        let totalClients = clientRows.length;
+        let askedClients = 0;
+        
+        clientRows.forEach(row => {
+            const askedCell = row.cells[3].textContent;
+            if (askedCell.includes('✅ Yes')) {
+                askedClients++;
+            }
+        });
+        
+        const percentage = totalClients > 0 ? Math.round((askedClients / totalClients) * 100) : 0;
+        
+        document.getElementById('clientsAskedStat').textContent = `${askedClients} of ${totalClients}`;
+        document.getElementById('clientsAskedPercent').textContent = `${percentage}%`;
+    }
+
+    // Initialize stats on page load
+    updateStats();
+
+    // Add click handlers for action buttons
+    document.querySelectorAll('button').forEach(button => {
+        if (button.textContent.includes('Contact') || button.textContent.includes('Edit')) {
+            button.addEventListener('click', (e) => {
+                e.preventDefault();
+                const originalText = button.textContent;
+                button.textContent = 'Done ✓';
+                button.classList.add('text-green-600');
+                
+                setTimeout(() => {
+                    button.textContent = originalText;
+                    button.classList.remove('text-green-600');
+                }, 2000);
+            });
+        }
+    });
+
+    // Checkbox functionality for to-do items
+    document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            const label = this.nextElementSibling;
+            if (this.checked) {
+                label.classList.add('line-through', 'text-gray-400');
+            } else {
+                label.classList.remove('line-through', 'text-gray-400');
+            }
+        });
+    });
+</script>

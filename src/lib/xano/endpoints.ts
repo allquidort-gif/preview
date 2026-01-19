@@ -1,9 +1,6 @@
 // src/lib/xano/endpoints.ts
 import { xanoFetch } from "@/lib/xano/client";
 
-/**
- * Types (shape these to match your Xano table fields / API responses)
- */
 export type Bill = {
   id: number;
   user_id: string | number;
@@ -20,9 +17,9 @@ export type BillPayment = {
   id?: number;
   user_id: string | number;
   bill_id: number;
-  month: string; // "YYYY-MM"
+  month: string;
   paid: boolean;
-  paid_date: string | null; // "YYYY-MM-DD"
+  paid_date: string | null;
   amount_paid: number | null;
   notes: string | null;
   updated_at?: string;
@@ -38,6 +35,7 @@ export type AuthResponse = {
   authToken?: string;
   token?: string;
   auth_token?: string;
+  user_id?: number;
   user?: User;
 };
 
@@ -74,7 +72,6 @@ export async function upsertBillPayment(input: BillPayment) {
   });
 }
 
-// Auth endpoints
 export async function login(email: string, password: string) {
   return xanoFetch<AuthResponse>(`/auth/login`, {
     method: "POST",

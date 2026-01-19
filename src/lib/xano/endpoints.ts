@@ -35,7 +35,9 @@ export type User = {
 };
 
 export type AuthResponse = {
-  authToken: string;
+  authToken?: string;
+  token?: string;
+  auth_token?: string;
   user?: User;
 };
 

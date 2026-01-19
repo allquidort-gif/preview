@@ -23,33 +23,54 @@ export default function LoginPage() {
         ? await register(email, password)
         : await login(email, password);
 
-      console.log("Auth response:", result);
-
       // Handle different response formats from Xano
-      const token = result.authToken || result.token || result.auth_token || (typeof result === 'string' ? result : null);
+      const token = result.authToken || result.token || result.auth_token;
       
       if (!token) {
-        setError("No auth token received. Response: " + JSON.stringify(result));
+        setError("No auth token received");
         return;
       }
 
       // Store auth token
       localStorage.setItem("auth_token", token);
       
-      // Decode JWT to get user_id (the 'id' claim)
-      try {
-        const parts = token.split(".");
-        if (parts.length === 3) {
-          const payload = JSON.parse(atob(parts[1]));
-          console.log("JWT payload:", payload);
-          localStorage.setItem("user_id", String(payload.id));
-        } else {
-          setError("Invalid token format");
+      // For JWE tokens (5 parts) or JWT tokens (3 parts), we need to get user_id differently
+      // The token header contains the algorithm info, but user_id is encrypted
+      // We'll decode the first part to check, but for JWE we need to call an API or store user info separately
+      
+      const parts = token.split(".");
+      
+      if (parts.length === 3) {
+        // Standard JWT - decode payload
+        const base64Payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+        const payload = JSON.parse(atob(base64Payload));
+        localStorage.setItem("user_id", String(payload.id));
+      } else if (parts.length === 5) {
+        // JWE (encrypted) - decode the header to get the user id
+        // Xano JWE header contains the id in the first part
+        try {
+          const base64Header = parts[0].replace(/-/g, '+').replace(/_/g, '/');
+          const header = JSON.parse(atob(base64Header));
+          
+          // If header has id, use it. Otherwise we need to get it from /auth/me endpoint
+          if (header.id) {
+            localStorage.setItem("user_id", String(header.id));
+          } else {
+            // For Xano JWE, we need to call /auth/me to get user info
+            // For now, let's store the email and fetch user on dashboard load
+            // Or we can modify the Xano endpoint to also return user_id
+            
+            // Temporary: Store email to look up user later, or modify endpoint
+            // Let's update the Xano endpoint to return user_id alongside token
+            setError("JWE token - need to update Xano endpoint to return user_id");
+            return;
+          }
+        } catch {
+          setError("Could not decode token header");
           return;
         }
-      } catch (decodeError) {
-        console.error("Token decode error:", decodeError);
-        setError("Failed to decode token: " + token.substring(0, 50) + "...");
+      } else {
+        setError("Unexpected token format");
         return;
       }
 

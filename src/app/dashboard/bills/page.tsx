@@ -1,6 +1,6 @@
 // src/app/dashboard/bills/page.tsx
 "use client";
-
+ 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import BillsTable, { BillsTableRow } from "@/components/bills/BillsTable";

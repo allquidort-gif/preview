@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import BillsTable, { BillsTableRow } from "@/components/bills/BillsTable";
 import AddBillForm, { NewBillInput } from "@/components/bills/AddBillForm";
 import {
@@ -19,7 +20,13 @@ function getUserId(): string {
   return window.localStorage.getItem("user_id") ?? "";
 }
 
+function getAuthToken(): string {
+  if (typeof window === "undefined") return "";
+  return window.localStorage.getItem("auth_token") ?? "";
+}
+
 export default function BillsPage() {
+  const router = useRouter();
   const { month, setMonth, monthLabel } = useMonth();
   const [userId, setUserId] = useState<string>("");
 
@@ -33,15 +40,21 @@ export default function BillsPage() {
   const [savingNewBill, setSavingNewBill] = useState(false);
 
   useEffect(() => {
-    setUserId(getUserId());
-  }, []);
+    // Check for auth
+    const token = getAuthToken();
+    const id = getUserId();
+    if (!token || !id) {
+      router.push("/login");
+      return;
+    }
+    setUserId(id);
+  }, [router]);
 
   async function refresh() {
     if (!userId) {
       setBills([]);
       setPayments([]);
       setLoading(false);
-      setError("Missing user_id. Set localStorage user_id to your Xano user id.");
       return;
     }
 
@@ -198,6 +211,12 @@ export default function BillsPage() {
     }
   }
 
+  function handleLogout() {
+    localStorage.removeItem("auth_token");
+    localStorage.removeItem("user_id");
+    router.push("/login");
+  }
+
   return (
     <div style={{ padding: 24, maxWidth: 1100, margin: "0 auto" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, flexWrap: "wrap" }}>
@@ -224,6 +243,13 @@ export default function BillsPage() {
             style={{ height: 36, padding: "0 12px", borderRadius: 10, border: "1px solid #ddd", background: "white", cursor: "pointer" }}
           >
             + Add bill
+          </button>
+
+          <button
+            onClick={handleLogout}
+            style={{ height: 36, padding: "0 12px", borderRadius: 10, border: "1px solid #ddd", background: "white", cursor: "pointer", opacity: 0.7 }}
+          >
+            Logout
           </button>
         </div>
       </div>

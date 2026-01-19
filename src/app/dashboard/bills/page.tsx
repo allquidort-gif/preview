@@ -14,20 +14,13 @@ import {
 } from "@/lib/xano/endpoints";
 import { useMonth } from "@/hooks/useMonth";
 
-/**
- * Notes:
- * - This page assumes you have some notion of a "current user" on the client.
- * - For a single-user personal app, the simplest approach is setting USER_ID once in localStorage.
- *   localStorage.setItem("user_id", "<your-xano-user-id>");
- * - If you're using Firebase Auth, later we can swap this for firebase_uid → Xano user lookup.
- */
 function getUserId(): string {
   if (typeof window === "undefined") return "";
   return window.localStorage.getItem("user_id") ?? "";
 }
 
 export default function BillsPage() {
-  const { month, setMonth, monthLabel } = useMonth(); // "YYYY-MM"
+  const { month, setMonth, monthLabel } = useMonth();
   const [userId, setUserId] = useState<string>("");
 
   const [bills, setBills] = useState<Bill[]>([]);
@@ -35,7 +28,6 @@ export default function BillsPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>("");
 
-  // UI state
   const [showAdd, setShowAdd] = useState(false);
   const [savingPaymentIds, setSavingPaymentIds] = useState<Set<number>>(new Set());
   const [savingNewBill, setSavingNewBill] = useState(false);
@@ -85,7 +77,6 @@ export default function BillsPage() {
       .map((bill) => {
         const p = paymentsByBillId.get(bill.id);
         const paid = p?.paid ?? false;
-
         const expected = bill.amount_expected ?? null;
         const amountPaid = p?.amount_paid ?? null;
 
@@ -116,7 +107,7 @@ export default function BillsPage() {
     setError("");
     try {
       await createBill({
-        userId,
+        user_id: userId,
         name: input.name.trim(),
         due_day: input.due_day,
         amount_expected: input.amount_expected,
@@ -143,19 +134,16 @@ export default function BillsPage() {
       const bill = bills.find((b) => b.id === billId);
       const existing = paymentsByBillId.get(billId);
 
-      // If marking paid and no explicit amount, default to expected amount (if provided).
-      const amount_paid =
-        nextPaid
-          ? (existing?.amount_paid ?? bill?.amount_expected ?? null)
-          : null;
+      const amount_paid = nextPaid
+        ? (existing?.amount_paid ?? bill?.amount_expected ?? null)
+        : null;
 
-      const paid_date =
-        nextPaid
-          ? (existing?.paid_date ?? new Date().toISOString().slice(0, 10)) // YYYY-MM-DD
-          : null;
+      const paid_date = nextPaid
+        ? (existing?.paid_date ?? new Date().toISOString().slice(0, 10))
+        : null;
 
       await upsertBillPayment({
-        userId,
+        user_id: userId,
         bill_id: billId,
         month,
         paid: nextPaid,
@@ -164,7 +152,6 @@ export default function BillsPage() {
         notes: existing?.notes ?? null,
       });
 
-      // Optimistic-ish refresh of payments
       const p = await listBillPayments({ userId, month });
       setPayments(p);
     } catch (e: any) {
@@ -189,7 +176,7 @@ export default function BillsPage() {
       const paid = existing?.paid ?? false;
 
       await upsertBillPayment({
-        userId,
+        user_id: userId,
         bill_id: billId,
         month,
         paid,

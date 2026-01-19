@@ -1,19 +1,20 @@
 // src/app/dashboard/bills/page.tsx
 "use client";
- 
+
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import BillsTable, { BillsTableRow } from "@/components/bills/BillsTable";
 import AddBillForm, { NewBillInput } from "@/components/bills/AddBillForm";
+import EditBillForm from "@/components/bills/EditBillForm";
 import {
   Bill,
   BillPayment,
   createBill,
+  updateBill,
   listBillPayments,
   listBills,
   upsertBillPayment,
 } from "@/lib/xano/endpoints";
-import { useMonth } from "@/hooks/useMonth";
 
 function getUserId(): string {
   if (typeof window === "undefined") return "";
@@ -25,9 +26,25 @@ function getAuthToken(): string {
   return window.localStorage.getItem("auth_token") ?? "";
 }
 
+function getMonthString(date: Date): string {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  return `${yyyy}-${mm}`;
+}
+
+function parseMonth(month: string): Date {
+  const [y, m] = month.split("-");
+  return new Date(Number(y), Number(m) - 1, 1);
+}
+
+function formatMonthLabel(month: string): string {
+  const d = parseMonth(month);
+  return d.toLocaleString(undefined, { month: "long", year: "numeric" });
+}
+
 export default function BillsPage() {
   const router = useRouter();
-  const { month, setMonth, monthLabel } = useMonth();
+  const [month, setMonth] = useState<string>(() => getMonthString(new Date()));
   const [userId, setUserId] = useState<string>("");
 
   const [bills, setBills] = useState<Bill[]>([]);
@@ -36,11 +53,11 @@ export default function BillsPage() {
   const [error, setError] = useState<string>("");
 
   const [showAdd, setShowAdd] = useState(false);
+  const [editingBill, setEditingBill] = useState<Bill | null>(null);
   const [savingPaymentIds, setSavingPaymentIds] = useState<Set<number>>(new Set());
   const [savingNewBill, setSavingNewBill] = useState(false);
 
   useEffect(() => {
-    // Check for auth
     const token = getAuthToken();
     const id = getUserId();
     if (!token || !id) {
@@ -74,7 +91,6 @@ export default function BillsPage() {
   useEffect(() => {
     if (!userId) return;
     void refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, month]);
 
   const paymentsByBillId = useMemo(() => {
@@ -113,6 +129,22 @@ export default function BillsPage() {
     return { totalExpected, totalPaid, remaining };
   }, [rows]);
 
+  function goToPrevMonth() {
+    const d = parseMonth(month);
+    d.setMonth(d.getMonth() - 1);
+    setMonth(getMonthString(d));
+  }
+
+  function goToNextMonth() {
+    const d = parseMonth(month);
+    d.setMonth(d.getMonth() + 1);
+    setMonth(getMonthString(d));
+  }
+
+  function goToCurrentMonth() {
+    setMonth(getMonthString(new Date()));
+  }
+
   async function handleAddBill(input: NewBillInput) {
     if (!userId) return;
 
@@ -134,6 +166,39 @@ export default function BillsPage() {
       setError(e?.message || "Failed to create bill.");
     } finally {
       setSavingNewBill(false);
+    }
+  }
+
+  async function handleEditBill(id: number, input: NewBillInput) {
+    if (!userId) return;
+
+    setError("");
+    try {
+      await updateBill(id, {
+        name: input.name.trim(),
+        due_day: input.due_day,
+        amount_expected: input.amount_expected,
+        is_variable: input.is_variable,
+        autopay: input.autopay,
+      });
+      setEditingBill(null);
+      await refresh();
+    } catch (e: any) {
+      setError(e?.message || "Failed to update bill.");
+    }
+  }
+
+  async function handleDeleteBill(id: number) {
+    if (!userId) return;
+    if (!confirm("Are you sure you want to delete this bill?")) return;
+
+    setError("");
+    try {
+      await updateBill(id, { active: false });
+      setEditingBill(null);
+      await refresh();
+    } catch (e: any) {
+      setError(e?.message || "Failed to delete bill.");
     }
   }
 
@@ -223,20 +288,32 @@ export default function BillsPage() {
         <div>
           <h1 style={{ fontSize: 22, margin: 0 }}>Monthly Bills</h1>
           <p style={{ margin: "6px 0 0", opacity: 0.75 }}>
-            Track recurring bills and mark them paid for <strong>{monthLabel}</strong>.
+            Track recurring bills and mark them paid for <strong>{formatMonthLabel(month)}</strong>.
           </p>
         </div>
 
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <label style={{ display: "flex", flexDirection: "column", fontSize: 12, opacity: 0.8 }}>
-            Month
-            <input
-              value={month}
-              onChange={(e) => setMonth(e.target.value)}
-              placeholder="YYYY-MM"
-              style={{ height: 34, padding: "0 10px", borderRadius: 8, border: "1px solid #ddd", width: 120 }}
-            />
-          </label>
+          {/* Month navigation */}
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <button
+              onClick={goToPrevMonth}
+              style={{ height: 36, width: 36, borderRadius: 8, border: "1px solid #ddd", background: "white", cursor: "pointer", fontSize: 18 }}
+            >
+              ←
+            </button>
+            <button
+              onClick={goToCurrentMonth}
+              style={{ height: 36, padding: "0 12px", borderRadius: 8, border: "1px solid #ddd", background: "white", cursor: "pointer", fontSize: 13 }}
+            >
+              Today
+            </button>
+            <button
+              onClick={goToNextMonth}
+              style={{ height: 36, width: 36, borderRadius: 8, border: "1px solid #ddd", background: "white", cursor: "pointer", fontSize: 18 }}
+            >
+              →
+            </button>
+          </div>
 
           <button
             onClick={() => setShowAdd(true)}
@@ -274,6 +351,7 @@ export default function BillsPage() {
           savingPaymentIds={savingPaymentIds}
           onTogglePaid={handleTogglePaid}
           onUpdatePaymentField={handleUpdatePaymentField}
+          onEditBill={(bill) => setEditingBill(bill)}
         />
       </div>
 
@@ -283,6 +361,15 @@ export default function BillsPage() {
         onClose={() => setShowAdd(false)}
         onSubmit={handleAddBill}
       />
+
+      {editingBill && (
+        <EditBillForm
+          bill={editingBill}
+          onClose={() => setEditingBill(null)}
+          onSubmit={(input) => handleEditBill(editingBill.id, input)}
+          onDelete={() => handleDeleteBill(editingBill.id)}
+        />
+      )}
     </div>
   );
 }

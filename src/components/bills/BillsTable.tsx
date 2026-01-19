@@ -21,6 +21,7 @@ export default function BillsTable({
   savingPaymentIds,
   onTogglePaid,
   onUpdatePaymentField,
+  onEditBill,
 }: {
   rows: BillsTableRow[];
   loading: boolean;
@@ -30,6 +31,7 @@ export default function BillsTable({
     billId: number,
     patch: Partial<Pick<BillPayment, "paid_date" | "amount_paid" | "notes">>
   ) => void;
+  onEditBill: (bill: Bill) => void;
 }) {
   if (loading) {
     return (
@@ -42,7 +44,7 @@ export default function BillsTable({
   if (!rows.length) {
     return (
       <div style={{ padding: 14, border: "1px solid #eee", borderRadius: 12 }}>
-        No bills yet. Click <strong>“Add bill”</strong> to create your first recurring bill.
+        No bills yet. Click <strong>"Add bill"</strong> to create your first recurring bill.
       </div>
     );
   }
@@ -60,6 +62,7 @@ export default function BillsTable({
             <Th>Paid date</Th>
             <Th>Amount paid</Th>
             <Th>Notes</Th>
+            <Th></Th>
           </tr>
         </thead>
         <tbody>
@@ -70,6 +73,7 @@ export default function BillsTable({
               saving={savingPaymentIds.has(row.bill.id)}
               onTogglePaid={onTogglePaid}
               onUpdatePaymentField={onUpdatePaymentField}
+              onEditBill={onEditBill}
             />
           ))}
         </tbody>
@@ -83,6 +87,7 @@ function BillRow({
   saving,
   onTogglePaid,
   onUpdatePaymentField,
+  onEditBill,
 }: {
   row: BillsTableRow;
   saving: boolean;
@@ -91,6 +96,7 @@ function BillRow({
     billId: number,
     patch: Partial<Pick<BillPayment, "paid_date" | "amount_paid" | "notes">>
   ) => void;
+  onEditBill: (bill: Bill) => void;
 }) {
   const { bill, payment } = row;
 
@@ -158,11 +164,27 @@ function BillRow({
           style={{ ...inputStyle, width: "100%" }}
         />
       </Td>
+
+      <Td>
+        <button
+          onClick={() => onEditBill(bill)}
+          style={{
+            background: "none",
+            border: "1px solid #ddd",
+            borderRadius: 6,
+            padding: "4px 10px",
+            cursor: "pointer",
+            fontSize: 12,
+          }}
+        >
+          Edit
+        </button>
+      </Td>
     </tr>
   );
 }
 
-function Th({ children }: { children: React.ReactNode }) {
+function Th({ children }: { children?: React.ReactNode }) {
   return (
     <th style={{ textAlign: "left", padding: "10px 12px", fontSize: 12, opacity: 0.75 }}>
       {children}

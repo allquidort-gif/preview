@@ -47,8 +47,24 @@ export async function createBill(input: Omit<Bill, "id">) {
   return xanoFetch<Bill>(`/bills`, { method: "POST", body: input });
 }
 
+/**
+ * Update a bill with partial data.
+ * The Xano endpoint now accepts nullable fields and uses null-coalescing
+ * to preserve existing values when null is passed.
+ */
 export async function updateBill(id: number, patch: Partial<Bill>) {
-  return xanoFetch<Bill>(`/bills/${id}`, { method: "PATCH", body: patch });
+  // Send all fields with null for any not provided
+  // The backend uses ?? to fall back to existing values for null fields
+  const body = {
+    name: patch.name ?? null,
+    due_day: patch.due_day ?? null,
+    amount_expected: patch.amount_expected ?? null,
+    is_variable: patch.is_variable ?? null,
+    autopay: patch.autopay ?? null,
+    active: patch.active ?? null,
+  };
+  
+  return xanoFetch<Bill>(`/bills/${id}`, { method: "PATCH", body });
 }
 
 export async function listBillPayments({

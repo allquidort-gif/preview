@@ -23,12 +23,35 @@ export default function LoginPage() {
         ? await register(email, password)
         : await login(email, password);
 
-      // Store auth token and user_id
-      localStorage.setItem("auth_token", result.authToken);
+      console.log("Auth response:", result);
+
+      // Handle different response formats from Xano
+      const token = result.authToken || result.token || result.auth_token || (typeof result === 'string' ? result : null);
+      
+      if (!token) {
+        setError("No auth token received. Response: " + JSON.stringify(result));
+        return;
+      }
+
+      // Store auth token
+      localStorage.setItem("auth_token", token);
       
       // Decode JWT to get user_id (the 'id' claim)
-      const payload = JSON.parse(atob(result.authToken.split(".")[1]));
-      localStorage.setItem("user_id", String(payload.id));
+      try {
+        const parts = token.split(".");
+        if (parts.length === 3) {
+          const payload = JSON.parse(atob(parts[1]));
+          console.log("JWT payload:", payload);
+          localStorage.setItem("user_id", String(payload.id));
+        } else {
+          setError("Invalid token format");
+          return;
+        }
+      } catch (decodeError) {
+        console.error("Token decode error:", decodeError);
+        setError("Failed to decode token: " + token.substring(0, 50) + "...");
+        return;
+      }
 
       router.push("/dashboard/bills");
     } catch (e: any) {
@@ -113,7 +136,9 @@ export default function LoginPage() {
               background: "#fff7f7", 
               border: "1px solid #f1c0c0", 
               borderRadius: 10,
-              color: "#c00"
+              color: "#c00",
+              fontSize: 13,
+              wordBreak: "break-all"
             }}>
               {error}
             </div>

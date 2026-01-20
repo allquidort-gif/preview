@@ -370,7 +370,20 @@ export default function TransactionsPage() {
 
       await createTransactionsRaw(rawTxns);
 
-      setUploadProgress("Processing transactions...");
+      // Rate limit helper: 10 requests per 20 seconds = max 4 requests then wait
+      const rateLimitDelay = () => new Promise(resolve => setTimeout(resolve, 2500));
+      let requestCount = 0;
+      const checkRateLimit = async () => {
+        requestCount++;
+        if (requestCount >= 4) {
+          setUploadProgress("Waiting for rate limit...");
+          await rateLimitDelay();
+          requestCount = 0;
+        }
+      };
+
+      setUploadProgress("Matching bills...");
+      await checkRateLimit();
 
       // Get current bills for matching
       const currentBills = await listBills({ userId });
@@ -379,6 +392,95 @@ export default function TransactionsPage() {
       // Track bills we've created in this session to avoid duplicates
       const createdBillsByMerchant = new Map<string, Bill>();
 
+      // FIRST PASS: Identify all unique recurring merchants that need new bills
+      const billsToCreate: { merchant: string; normalizedMerchant: string; dueDay: number; amount: number }[] = [];
+      
+      for (const p of parsed) {
+        if (p.amount >= 0) continue; // Skip income
+        
+        const merchant = extractMerchant(p.description);
+        const { type: txnType } = detectTransactionType(
+          p.description,
+          p.amount,
+          p.bank_category,
+          merchantCounts,
+          merchant
+        );
+
+        if (txnType === "recurring") {
+          const normalizedMerchant = normalizeMerchant(merchant);
+          
+          // Skip if we already plan to create this bill or it exists
+          if (createdBillsByMerchant.has(normalizedMerchant)) continue;
+          if (billsToCreate.some(b => b.normalizedMerchant === normalizedMerchant)) continue;
+          if (findMatchingBill(merchant, activeBills)) continue;
+
+          billsToCreate.push({
+            merchant,
+            normalizedMerchant,
+            dueDay: new Date(p.date).getDate(),
+            amount: Math.abs(p.amount),
+          });
+        }
+      }
+
+      // CREATE BILLS IN BATCHES with rate limit delays
+      if (billsToCreate.length > 0) {
+        setUploadProgress(`Creating ${billsToCreate.length} bills...`);
+        
+        for (let i = 0; i < billsToCreate.length; i++) {
+          const billInfo = billsToCreate[i];
+          
+          setUploadProgress(`Creating bill ${i + 1}/${billsToCreate.length}: ${billInfo.merchant}...`);
+          
+          try {
+            await checkRateLimit();
+            const newBill = await createBill({
+              user_id: userId,
+              name: billInfo.merchant,
+              due_day: billInfo.dueDay,
+              amount_expected: billInfo.amount,
+              is_variable: false,
+              autopay: false,
+              active: true,
+            });
+            createdBillsByMerchant.set(billInfo.normalizedMerchant, newBill);
+            activeBills.push(newBill);
+          } catch (billError) {
+            console.error("Failed to create bill:", billError);
+            // If rate limited, wait and retry once
+            if (String(billError).includes("429") || String(billError).includes("TOO_MANY")) {
+              setUploadProgress(`Rate limited, waiting 5s...`);
+              await new Promise(resolve => setTimeout(resolve, 5000));
+              requestCount = 0;
+              try {
+                const newBill = await createBill({
+                  user_id: userId,
+                  name: billInfo.merchant,
+                  due_day: billInfo.dueDay,
+                  amount_expected: billInfo.amount,
+                  is_variable: false,
+                  autopay: false,
+                  active: true,
+                });
+                createdBillsByMerchant.set(billInfo.normalizedMerchant, newBill);
+                activeBills.push(newBill);
+              } catch (retryError) {
+                console.error("Retry failed:", retryError);
+              }
+            }
+          }
+        }
+      }
+
+      // Wait a bit before the bulk insert
+      if (billsToCreate.length > 0) {
+        setUploadProgress("Preparing transactions...");
+        await rateLimitDelay();
+        requestCount = 0;
+      }
+
+      // SECOND PASS: Build transaction data with bill IDs
       const txnData: any[] = [];
 
       for (const p of parsed) {
@@ -392,39 +494,19 @@ export default function TransactionsPage() {
         );
         let billId: number | null = null;
 
-        // For recurring transactions, try to match or create a bill
+        // For recurring transactions, find the bill
         if (txnType === "recurring" && p.amount < 0) {
           const normalizedMerchant = normalizeMerchant(merchant);
-
-          // First check if we already created a bill for this merchant in this upload
-          const existingCreated = createdBillsByMerchant.get(normalizedMerchant);
-          if (existingCreated) {
-            billId = existingCreated.id;
+          
+          // Check our created bills first
+          const createdBill = createdBillsByMerchant.get(normalizedMerchant);
+          if (createdBill) {
+            billId = createdBill.id;
           } else {
-            // Try to find a matching existing bill
+            // Try to find existing bill
             const matchedBill = findMatchingBill(merchant, activeBills);
-
             if (matchedBill) {
               billId = matchedBill.id;
-            } else {
-              // Create a new bill
-              setUploadProgress(`Creating bill for ${merchant}...`);
-              try {
-                const newBill = await createBill({
-                  user_id: userId,
-                  name: merchant,
-                  due_day: new Date(p.date).getDate(),
-                  amount_expected: Math.abs(p.amount),
-                  is_variable: false,
-                  autopay: false,
-                  active: true,
-                });
-                billId = newBill.id;
-                createdBillsByMerchant.set(normalizedMerchant, newBill);
-                activeBills.push(newBill);
-              } catch (billError) {
-                console.error("Failed to create bill:", billError);
-              }
             }
           }
         }

@@ -135,8 +135,28 @@ function extractMerchant(description: string): string {
   return description.substring(0, 50);
 }
 
-function detectTransactionType(description: string, amount: number, bankCategory: string): string {
+// Normalize merchant name for matching (remove common variations)
+function normalizeMerchant(merchant: string): string {
+  return merchant
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "") // Remove non-alphanumeric
+    .replace(/^(the|a|an)/, "") // Remove common prefixes
+    .trim();
+}
+
+function detectTransactionType(
+  description: string,
+  amount: number,
+  bankCategory: string,
+  merchantOccurrences: Map<string, number>,
+  merchant: string
+): { type: string; suggestedRecurring: boolean } {
   const desc = description.toLowerCase();
+  const normalizedMerchant = normalizeMerchant(merchant);
+  const occurrences = merchantOccurrences.get(normalizedMerchant) || 0;
+
+  // Check if this merchant appears multiple times (2+ = likely recurring)
+  const suggestedRecurring = occurrences >= 2 && amount < 0;
 
   if (
     desc.includes("payroll") ||
@@ -145,13 +165,14 @@ function detectTransactionType(description: string, amount: number, bankCategory
     bankCategory === "Paychecks/Salary" ||
     bankCategory === "Investment Income"
   ) {
-    return "income";
+    return { type: "income", suggestedRecurring: false };
   }
 
   if (desc.includes("transfer") || bankCategory === "Transfers") {
-    return "transfer";
+    return { type: "transfer", suggestedRecurring: false };
   }
 
+  // Known recurring patterns
   if (
     desc.includes("apple.com/bill") ||
     desc.includes("godaddy") ||
@@ -165,20 +186,30 @@ function detectTransactionType(description: string, amount: number, bankCategory
     bankCategory === "Loans" ||
     bankCategory === "Online Services"
   ) {
-    return "recurring";
+    return { type: "recurring", suggestedRecurring: true };
   }
 
-  return "misc";
+  // If merchant appears multiple times, suggest as recurring but keep as misc
+  return { type: suggestedRecurring ? "misc" : "misc", suggestedRecurring };
 }
 
-// Helper to find matching bill by merchant name
+// Helper to find matching bill by merchant name (improved matching)
 function findMatchingBill(merchant: string, bills: Bill[]): Bill | null {
-  const merchantLower = merchant.toLowerCase();
+  const normalizedMerchant = normalizeMerchant(merchant);
+
   for (const bill of bills) {
-    const billNameLower = bill.name.toLowerCase();
-    // Check if merchant contains bill name or vice versa
-    if (merchantLower.includes(billNameLower) || billNameLower.includes(merchantLower)) {
+    const normalizedBillName = normalizeMerchant(bill.name);
+
+    // Exact match after normalization
+    if (normalizedMerchant === normalizedBillName) {
       return bill;
+    }
+
+    // One contains the other (at least 4 chars to avoid false matches)
+    if (normalizedMerchant.length >= 4 && normalizedBillName.length >= 4) {
+      if (normalizedMerchant.includes(normalizedBillName) || normalizedBillName.includes(normalizedMerchant)) {
+        return bill;
+      }
     }
   }
   return null;
@@ -197,7 +228,7 @@ export default function TransactionsPage() {
   const [uploadingAccount, setUploadingAccount] = useState<AccountType | null>(null);
   const [uploadProgress, setUploadProgress] = useState<string>("");
 
-  const [viewMode, setViewMode] = useState<"all" | "recurring" | "misc" | "income">("all");
+  const [viewMode, setViewMode] = useState<"all" | "recurring" | "misc" | "income" | "suggested">("all");
   const [sortBy, setSortBy] = useState<"date" | "amount" | "type">("date");
   const [clearing, setClearing] = useState(false);
 
@@ -235,32 +266,31 @@ export default function TransactionsPage() {
 
   async function handleClearAllData() {
     if (!userId) return;
-    
+
     const confirmed = window.confirm(
       "Are you sure you want to delete ALL imported transactions?\n\nThis will remove:\n- All transactions\n- All raw transaction data\n- All import records"
     );
-    
+
     if (!confirmed) return;
-    
+
     setClearing(true);
     setError("");
     setUploadProgress("Deleting all data...");
-    
+
     try {
-      // Use the bulk delete endpoint - does it all server-side in one call!
       const response = await fetch(
         `https://x8ki-letl-twmt.n7.xano.io/api:vRdkZVBj/data/clear-all?user_id=${userId}`,
         { method: "DELETE" }
       );
-      
+
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`Failed to clear data: ${errorText}`);
       }
-      
+
       setUploadProgress("Done! Refreshing...");
       await refresh();
-      
+
       setUploadProgress("All data cleared!");
       setTimeout(() => {
         setClearing(false);
@@ -289,9 +319,30 @@ export default function TransactionsPage() {
         throw new Error("No valid transactions found in CSV");
       }
 
-      setUploadProgress(`Found ${parsed.length} transactions. Creating import...`);
+      setUploadProgress(`Found ${parsed.length} transactions. Analyzing patterns...`);
 
-      // Create import record
+      // Count merchant occurrences for duplicate detection
+      const merchantCounts = new Map<string, number>();
+      for (const p of parsed) {
+        const merchant = extractMerchant(p.description);
+        const normalizedMerchant = normalizeMerchant(merchant);
+        if (p.amount < 0) {
+          // Only count expenses
+          merchantCounts.set(normalizedMerchant, (merchantCounts.get(normalizedMerchant) || 0) + 1);
+        }
+      }
+
+      // Log suggested recurring merchants
+      const suggestedRecurring = Array.from(merchantCounts.entries())
+        .filter(([, count]) => count >= 2)
+        .map(([merchant, count]) => `${merchant} (${count}x)`);
+
+      if (suggestedRecurring.length > 0) {
+        console.log("Suggested recurring merchants:", suggestedRecurring);
+      }
+
+      setUploadProgress("Creating import record...");
+
       const importRecord = await createImport({
         user_id: userId,
         filename: file.name,
@@ -302,7 +353,6 @@ export default function TransactionsPage() {
 
       setUploadProgress("Storing raw transactions...");
 
-      // Store raw transactions
       const rawTxns = parsed.map((p) => ({
         import_id: importRecord.id!,
         user_id: userId,
@@ -320,35 +370,40 @@ export default function TransactionsPage() {
 
       await createTransactionsRaw(rawTxns);
 
-      setUploadProgress("Processing transactions and matching bills...");
+      setUploadProgress("Processing transactions...");
 
       // Get current bills for matching
       const currentBills = await listBills({ userId });
       const activeBills = currentBills.filter((b) => b.active !== false);
-      
+
       // Track bills we've created in this session to avoid duplicates
       const createdBillsByMerchant = new Map<string, Bill>();
 
-      // Process transactions and create/match bills for recurring ones
       const txnData: any[] = [];
-      
+
       for (const p of parsed) {
-        const txnType = detectTransactionType(p.description, p.amount, p.bank_category);
         const merchant = extractMerchant(p.description);
+        const { type: txnType, suggestedRecurring } = detectTransactionType(
+          p.description,
+          p.amount,
+          p.bank_category,
+          merchantCounts,
+          merchant
+        );
         let billId: number | null = null;
 
         // For recurring transactions, try to match or create a bill
         if (txnType === "recurring" && p.amount < 0) {
-          const merchantKey = merchant.toLowerCase();
-          
+          const normalizedMerchant = normalizeMerchant(merchant);
+
           // First check if we already created a bill for this merchant in this upload
-          const existingCreated = createdBillsByMerchant.get(merchantKey);
+          const existingCreated = createdBillsByMerchant.get(normalizedMerchant);
           if (existingCreated) {
             billId = existingCreated.id;
           } else {
             // Try to find a matching existing bill
             const matchedBill = findMatchingBill(merchant, activeBills);
-            
+
             if (matchedBill) {
               billId = matchedBill.id;
             } else {
@@ -365,12 +420,10 @@ export default function TransactionsPage() {
                   active: true,
                 });
                 billId = newBill.id;
-                // Add to our tracking maps
-                createdBillsByMerchant.set(merchantKey, newBill);
+                createdBillsByMerchant.set(normalizedMerchant, newBill);
                 activeBills.push(newBill);
               } catch (billError) {
                 console.error("Failed to create bill:", billError);
-                // Continue without bill linkage
               }
             }
           }
@@ -386,7 +439,7 @@ export default function TransactionsPage() {
           account_id: 0,
           import_id: importRecord.id!,
           is_split: false,
-          notes: "",
+          notes: suggestedRecurring && txnType !== "recurring" ? "suggested_recurring" : "",
           is_recurring: txnType === "recurring",
           bill_id: billId,
           transaction_type: txnType,
@@ -397,7 +450,10 @@ export default function TransactionsPage() {
       await createTransactionsBulk({ user_id: parseInt(userId), transactions: txnData });
 
       const billsCreated = createdBillsByMerchant.size;
-      setUploadProgress(`Imported ${parsed.length} transactions! Created ${billsCreated} new bills.`);
+      const suggestedCount = txnData.filter((t) => t.notes === "suggested_recurring").length;
+      setUploadProgress(
+        `Imported ${parsed.length} transactions! ${billsCreated} bills created. ${suggestedCount} suggested recurring.`
+      );
       await refresh();
 
       setTimeout(() => {
@@ -420,31 +476,71 @@ export default function TransactionsPage() {
     }
   }
 
+  // Improved: Check for existing bill before creating, and link all matching transactions
   async function handleCreateBillFromTransaction(txn: Transaction) {
     if (!userId) return;
 
     try {
-      const newBill = await createBill({
-        user_id: userId,
-        name: txn.merchant || txn.description.substring(0, 30),
-        due_day: new Date(txn.date).getDate(),
-        amount_expected: Math.abs(txn.amount),
-        is_variable: false,
-        autopay: false,
-        active: true,
+      const merchantName = txn.merchant || txn.description.substring(0, 30);
+
+      // Check if a bill already exists for this merchant
+      const existingBill = findMatchingBill(merchantName, bills);
+
+      let billToUse: Bill;
+
+      if (existingBill) {
+        // Use existing bill instead of creating duplicate
+        billToUse = existingBill;
+      } else {
+        // Create new bill
+        billToUse = await createBill({
+          user_id: userId,
+          name: merchantName,
+          due_day: new Date(txn.date).getDate(),
+          amount_expected: Math.abs(txn.amount),
+          is_variable: false,
+          autopay: false,
+          active: true,
+        });
+      }
+
+      // Mark this transaction as recurring
+      await markTransactionRecurring(txn.id!, billToUse.id, true);
+
+      // Also mark any other transactions with the same merchant as recurring
+      const normalizedMerchant = normalizeMerchant(merchantName);
+      const matchingTxns = transactions.filter((t) => {
+        if (t.id === txn.id || t.is_recurring) return false;
+        const tMerchant = t.merchant || t.description.substring(0, 30);
+        return normalizeMerchant(tMerchant) === normalizedMerchant;
       });
 
-      await markTransactionRecurring(txn.id!, newBill.id, true);
+      // Mark other matching transactions (limit to avoid too many API calls)
+      for (const matchTxn of matchingTxns.slice(0, 10)) {
+        try {
+          await markTransactionRecurring(matchTxn.id!, billToUse.id, true);
+        } catch (e) {
+          console.error("Failed to mark matching transaction:", e);
+        }
+      }
+
       await refresh();
     } catch (e: any) {
       setError(e?.message || "Failed to create bill");
     }
   }
 
+  // Compute suggested recurring transactions
+  const suggestedRecurringTxns = useMemo(() => {
+    return transactions.filter((t) => t.notes === "suggested_recurring" && !t.is_recurring);
+  }, [transactions]);
+
   const filteredTransactions = useMemo(() => {
     let result = transactions;
 
-    if (viewMode !== "all") {
+    if (viewMode === "suggested") {
+      result = suggestedRecurringTxns;
+    } else if (viewMode !== "all") {
       result = result.filter((t) => t.transaction_type === viewMode);
     }
 
@@ -455,12 +551,12 @@ export default function TransactionsPage() {
         return Math.abs(b.amount) - Math.abs(a.amount);
       } else {
         const order = { recurring: 0, misc: 1, income: 2, transfer: 3 };
-        return (order[a.transaction_type] ?? 4) - (order[b.transaction_type] ?? 4);
+        return (order[a.transaction_type as keyof typeof order] ?? 4) - (order[b.transaction_type as keyof typeof order] ?? 4);
       }
     });
 
     return result;
-  }, [transactions, viewMode, sortBy]);
+  }, [transactions, viewMode, sortBy, suggestedRecurringTxns]);
 
   const summary = useMemo(() => {
     const income = transactions
@@ -530,6 +626,39 @@ export default function TransactionsPage() {
         <SummaryCard label="Remaining" value={summary.remaining} color={summary.remaining >= 0 ? "#10b981" : "#ef4444"} />
       </div>
 
+      {/* Suggested Recurring Alert */}
+      {suggestedRecurringTxns.length > 0 && (
+        <div
+          style={{
+            marginBottom: 16,
+            padding: 16,
+            border: "1px solid #fbbf24",
+            borderRadius: 12,
+            background: "#fffbeb",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <div>
+            <strong>💡 {suggestedRecurringTxns.length} transactions</strong> appear multiple times and might be recurring bills.
+          </div>
+          <button
+            onClick={() => setViewMode("suggested")}
+            style={{
+              padding: "8px 16px",
+              border: "1px solid #f59e0b",
+              borderRadius: 8,
+              background: "white",
+              cursor: "pointer",
+              fontWeight: 500,
+            }}
+          >
+            Review Suggested
+          </button>
+        </div>
+      )}
+
       {/* Upload Section */}
       <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 16, padding: 20, marginBottom: 24 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
@@ -592,7 +721,7 @@ export default function TransactionsPage() {
       {/* Filter Controls */}
       <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
         <div style={{ display: "flex", gap: 4, background: "#f1f5f9", borderRadius: 10, padding: 4 }}>
-          {(["all", "recurring", "misc", "income"] as const).map((mode) => (
+          {(["all", "suggested", "recurring", "misc", "income"] as const).map((mode) => (
             <button
               key={mode}
               onClick={() => setViewMode(mode)}
@@ -604,9 +733,18 @@ export default function TransactionsPage() {
                 fontWeight: 500,
                 background: viewMode === mode ? "white" : "transparent",
                 boxShadow: viewMode === mode ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
+                color: mode === "suggested" && suggestedRecurringTxns.length > 0 ? "#f59e0b" : "inherit",
               }}
             >
-              {mode === "all" ? "All" : mode === "recurring" ? "🔄 Recurring" : mode === "misc" ? "🛒 Misc" : "💰 Income"}
+              {mode === "all"
+                ? "All"
+                : mode === "suggested"
+                ? `💡 Suggested (${suggestedRecurringTxns.length})`
+                : mode === "recurring"
+                ? "🔄 Recurring"
+                : mode === "misc"
+                ? "🛒 Misc"
+                : "💰 Income"}
             </button>
           ))}
         </div>
@@ -631,7 +769,11 @@ export default function TransactionsPage() {
         <div style={{ padding: 20, textAlign: "center", opacity: 0.7 }}>Loading transactions...</div>
       ) : filteredTransactions.length === 0 ? (
         <div style={{ padding: 40, textAlign: "center", border: "1px dashed #e2e8f0", borderRadius: 16 }}>
-          <p style={{ margin: 0, opacity: 0.7 }}>No transactions found. Upload a bank statement to get started!</p>
+          <p style={{ margin: 0, opacity: 0.7 }}>
+            {viewMode === "suggested"
+              ? "No suggested recurring transactions. Import more data to detect patterns!"
+              : "No transactions found. Upload a bank statement to get started!"}
+          </p>
         </div>
       ) : (
         <div style={{ border: "1px solid #e2e8f0", borderRadius: 16, overflow: "hidden" }}>
@@ -643,6 +785,7 @@ export default function TransactionsPage() {
               onMarkRecurring={handleMarkRecurring}
               onCreateBill={() => handleCreateBillFromTransaction(txn)}
               isLast={idx === filteredTransactions.length - 1}
+              isSuggested={txn.notes === "suggested_recurring" && !txn.is_recurring}
             />
           ))}
         </div>
@@ -720,12 +863,14 @@ function TransactionRow({
   onMarkRecurring,
   onCreateBill,
   isLast,
+  isSuggested,
 }: {
   transaction: Transaction;
   bills: Bill[];
   onMarkRecurring: (txnId: number, isRecurring: boolean, billId: number | null) => void;
   onCreateBill: () => void;
   isLast: boolean;
+  isSuggested: boolean;
 }) {
   const [showBillSelect, setShowBillSelect] = useState(false);
 
@@ -751,7 +896,8 @@ function TransactionRow({
         gap: 16,
         padding: "14px 16px",
         borderBottom: isLast ? "none" : "1px solid #f1f5f9",
-        background: transaction.is_recurring ? "#fffbeb" : "white",
+        background: transaction.is_recurring ? "#fffbeb" : isSuggested ? "#fef3c7" : "white",
+        position: "relative",
       }}
     >
       <div
@@ -771,8 +917,24 @@ function TransactionRow({
       </div>
 
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-          {transaction.merchant || transaction.description.substring(0, 40)}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {transaction.merchant || transaction.description.substring(0, 40)}
+          </span>
+          {isSuggested && (
+            <span
+              style={{
+                fontSize: 10,
+                padding: "2px 6px",
+                background: "#fbbf24",
+                color: "#78350f",
+                borderRadius: 4,
+                fontWeight: 600,
+              }}
+            >
+              SUGGESTED RECURRING
+            </span>
+          )}
         </div>
         <div style={{ fontSize: 12, opacity: 0.6, marginTop: 2 }}>
           {new Date(transaction.date).toLocaleDateString()} • {transaction.description.substring(0, 60)}
@@ -805,14 +967,15 @@ function TransactionRow({
             style={{
               padding: "6px 10px",
               fontSize: 12,
-              border: "1px solid #e2e8f0",
+              border: isSuggested ? "1px solid #f59e0b" : "1px solid #e2e8f0",
               borderRadius: 6,
-              background: "white",
+              background: isSuggested ? "#fef3c7" : "white",
               cursor: "pointer",
+              fontWeight: isSuggested ? 600 : 400,
             }}
             title="Mark as recurring bill"
           >
-            🔄 Recurring
+            🔄 {isSuggested ? "Mark Recurring" : "Recurring"}
           </button>
         )}
 
@@ -840,7 +1003,7 @@ function TransactionRow({
           style={{
             position: "absolute",
             right: 100,
-            marginTop: 60,
+            top: 50,
             background: "white",
             border: "1px solid #e2e8f0",
             borderRadius: 10,
@@ -851,28 +1014,32 @@ function TransactionRow({
           }}
         >
           <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>Link to Bill:</div>
-          {bills.map((bill) => (
-            <button
-              key={bill.id}
-              onClick={() => {
-                onMarkRecurring(transaction.id!, true, bill.id);
-                setShowBillSelect(false);
-              }}
-              style={{
-                display: "block",
-                width: "100%",
-                padding: "8px 10px",
-                border: "none",
-                background: "#f8fafc",
-                borderRadius: 6,
-                marginBottom: 4,
-                cursor: "pointer",
-                textAlign: "left",
-              }}
-            >
-              {bill.name} {bill.amount_expected ? `($${bill.amount_expected})` : ""}
-            </button>
-          ))}
+          {bills.length > 0 ? (
+            bills.map((bill) => (
+              <button
+                key={bill.id}
+                onClick={() => {
+                  onMarkRecurring(transaction.id!, true, bill.id);
+                  setShowBillSelect(false);
+                }}
+                style={{
+                  display: "block",
+                  width: "100%",
+                  padding: "8px 10px",
+                  border: "none",
+                  background: "#f8fafc",
+                  borderRadius: 6,
+                  marginBottom: 4,
+                  cursor: "pointer",
+                  textAlign: "left",
+                }}
+              >
+                {bill.name} {bill.amount_expected ? `($${bill.amount_expected})` : ""}
+              </button>
+            ))
+          ) : (
+            <div style={{ fontSize: 12, opacity: 0.6, marginBottom: 8 }}>No existing bills</div>
+          )}
           <button
             onClick={() => {
               onCreateBill();

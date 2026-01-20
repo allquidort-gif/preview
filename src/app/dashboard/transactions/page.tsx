@@ -310,6 +310,12 @@ export default function TransactionsPage() {
     setUploadProgress("Reading file...");
     setError("");
 
+    // Simple rate limiter: wait 2.5 seconds before each API call
+    const waitForRateLimit = async (msg?: string) => {
+      if (msg) setUploadProgress(msg);
+      await new Promise(resolve => setTimeout(resolve, 2500));
+    };
+
     try {
       const text = await file.text();
       setUploadProgress("Parsing CSV...");
@@ -327,22 +333,12 @@ export default function TransactionsPage() {
         const merchant = extractMerchant(p.description);
         const normalizedMerchant = normalizeMerchant(merchant);
         if (p.amount < 0) {
-          // Only count expenses
           merchantCounts.set(normalizedMerchant, (merchantCounts.get(normalizedMerchant) || 0) + 1);
         }
       }
 
-      // Log suggested recurring merchants
-      const suggestedRecurring = Array.from(merchantCounts.entries())
-        .filter(([, count]) => count >= 2)
-        .map(([merchant, count]) => `${merchant} (${count}x)`);
-
-      if (suggestedRecurring.length > 0) {
-        console.log("Suggested recurring merchants:", suggestedRecurring);
-      }
-
-      setUploadProgress("Creating import record...");
-
+      // === API CALL 1: Create import record ===
+      await waitForRateLimit("Creating import record...");
       const importRecord = await createImport({
         user_id: userId,
         filename: file.name,
@@ -351,8 +347,8 @@ export default function TransactionsPage() {
         record_count: parsed.length,
       });
 
-      setUploadProgress("Storing raw transactions...");
-
+      // === API CALL 2: Store raw transactions ===
+      await waitForRateLimit("Storing raw transactions...");
       const rawTxns = parsed.map((p) => ({
         import_id: importRecord.id!,
         user_id: userId,
@@ -367,25 +363,10 @@ export default function TransactionsPage() {
         bank_category: p.bank_category,
         balance: p.balance,
       }));
-
       await createTransactionsRaw(rawTxns);
 
-      // Rate limit helper: 10 requests per 20 seconds = max 4 requests then wait
-      const rateLimitDelay = () => new Promise(resolve => setTimeout(resolve, 2500));
-      let requestCount = 0;
-      const checkRateLimit = async () => {
-        requestCount++;
-        if (requestCount >= 4) {
-          setUploadProgress("Waiting for rate limit...");
-          await rateLimitDelay();
-          requestCount = 0;
-        }
-      };
-
-      setUploadProgress("Matching bills...");
-      await checkRateLimit();
-
-      // Get current bills for matching
+      // === API CALL 3: Get existing bills ===
+      await waitForRateLimit("Loading existing bills...");
       const currentBills = await listBills({ userId });
       const activeBills = currentBills.filter((b) => b.active !== false);
 
@@ -424,63 +405,30 @@ export default function TransactionsPage() {
         }
       }
 
-      // CREATE BILLS IN BATCHES with rate limit delays
-      if (billsToCreate.length > 0) {
-        setUploadProgress(`Creating ${billsToCreate.length} bills...`);
+      // === API CALLS 4+: Create each bill with delay ===
+      for (let i = 0; i < billsToCreate.length; i++) {
+        const billInfo = billsToCreate[i];
+        await waitForRateLimit(`Creating bill ${i + 1}/${billsToCreate.length}: ${billInfo.merchant}...`);
         
-        for (let i = 0; i < billsToCreate.length; i++) {
-          const billInfo = billsToCreate[i];
-          
-          setUploadProgress(`Creating bill ${i + 1}/${billsToCreate.length}: ${billInfo.merchant}...`);
-          
-          try {
-            await checkRateLimit();
-            const newBill = await createBill({
-              user_id: userId,
-              name: billInfo.merchant,
-              due_day: billInfo.dueDay,
-              amount_expected: billInfo.amount,
-              is_variable: false,
-              autopay: false,
-              active: true,
-            });
-            createdBillsByMerchant.set(billInfo.normalizedMerchant, newBill);
-            activeBills.push(newBill);
-          } catch (billError) {
-            console.error("Failed to create bill:", billError);
-            // If rate limited, wait and retry once
-            if (String(billError).includes("429") || String(billError).includes("TOO_MANY")) {
-              setUploadProgress(`Rate limited, waiting 5s...`);
-              await new Promise(resolve => setTimeout(resolve, 5000));
-              requestCount = 0;
-              try {
-                const newBill = await createBill({
-                  user_id: userId,
-                  name: billInfo.merchant,
-                  due_day: billInfo.dueDay,
-                  amount_expected: billInfo.amount,
-                  is_variable: false,
-                  autopay: false,
-                  active: true,
-                });
-                createdBillsByMerchant.set(billInfo.normalizedMerchant, newBill);
-                activeBills.push(newBill);
-              } catch (retryError) {
-                console.error("Retry failed:", retryError);
-              }
-            }
-          }
+        try {
+          const newBill = await createBill({
+            user_id: userId,
+            name: billInfo.merchant,
+            due_day: billInfo.dueDay,
+            amount_expected: billInfo.amount,
+            is_variable: false,
+            autopay: false,
+            active: true,
+          });
+          createdBillsByMerchant.set(billInfo.normalizedMerchant, newBill);
+          activeBills.push(newBill);
+        } catch (billError) {
+          console.error("Failed to create bill:", billError);
         }
       }
 
-      // Wait a bit before the bulk insert
-      if (billsToCreate.length > 0) {
-        setUploadProgress("Preparing transactions...");
-        await rateLimitDelay();
-        requestCount = 0;
-      }
-
-      // SECOND PASS: Build transaction data with bill IDs
+      // Build transaction data with bill IDs (no API calls here)
+      setUploadProgress("Preparing transactions...");
       const txnData: any[] = [];
 
       for (const p of parsed) {
@@ -494,16 +442,12 @@ export default function TransactionsPage() {
         );
         let billId: number | null = null;
 
-        // For recurring transactions, find the bill
         if (txnType === "recurring" && p.amount < 0) {
           const normalizedMerchant = normalizeMerchant(merchant);
-          
-          // Check our created bills first
           const createdBill = createdBillsByMerchant.get(normalizedMerchant);
           if (createdBill) {
             billId = createdBill.id;
           } else {
-            // Try to find existing bill
             const matchedBill = findMatchingBill(merchant, activeBills);
             if (matchedBill) {
               billId = matchedBill.id;
@@ -528,20 +472,23 @@ export default function TransactionsPage() {
         });
       }
 
-      setUploadProgress("Saving transactions...");
+      // === FINAL API CALL: Bulk insert transactions ===
+      await waitForRateLimit("Saving transactions...");
       await createTransactionsBulk({ user_id: parseInt(userId), transactions: txnData });
 
       const billsCreated = createdBillsByMerchant.size;
       const suggestedCount = txnData.filter((t) => t.notes === "suggested_recurring").length;
       setUploadProgress(
-        `Imported ${parsed.length} transactions! ${billsCreated} bills created. ${suggestedCount} suggested recurring.`
+        `Done! ${parsed.length} transactions, ${billsCreated} bills, ${suggestedCount} suggested.`
       );
+      
+      await waitForRateLimit("Refreshing...");
       await refresh();
 
       setTimeout(() => {
         setUploadingAccount(null);
         setUploadProgress("");
-      }, 3000);
+      }, 2000);
     } catch (e: any) {
       setError(e?.message || "Failed to import transactions");
       setUploadingAccount(null);

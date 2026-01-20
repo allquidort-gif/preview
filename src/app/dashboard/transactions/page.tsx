@@ -199,6 +199,7 @@ export default function TransactionsPage() {
 
   const [viewMode, setViewMode] = useState<"all" | "recurring" | "misc" | "income">("all");
   const [sortBy, setSortBy] = useState<"date" | "amount" | "type">("date");
+  const [clearing, setClearing] = useState(false);
 
   useEffect(() => {
     const token = getAuthToken();
@@ -231,6 +232,83 @@ export default function TransactionsPage() {
   useEffect(() => {
     if (userId) refresh();
   }, [userId, month, refresh]);
+
+  async function handleClearAllData() {
+    if (!userId) return;
+    
+    const confirmed = window.confirm(
+      "Are you sure you want to delete ALL imported transactions?\n\nThis will remove:\n- All transactions\n- All raw transaction data\n- All import records\n\nThis may take a moment due to API rate limits."
+    );
+    
+    if (!confirmed) return;
+    
+    setClearing(true);
+    setError("");
+    setUploadProgress("Fetching data to delete...");
+    
+    try {
+      // Get all data IDs from the clear endpoint
+      const response = await fetch(
+        `https://x8ki-letl-twmt.n7.xano.io/api:vRdkZVBj/data/clear?user_id=${userId}`,
+        { method: "DELETE" }
+      );
+      
+      if (!response.ok) {
+        throw new Error("Failed to fetch data");
+      }
+      
+      const result = await response.json();
+      const txns = result.data?.transactions || [];
+      const totalToDelete = txns.length;
+      
+      if (totalToDelete === 0) {
+        setUploadProgress("No transactions to delete");
+        setTimeout(() => {
+          setClearing(false);
+          setUploadProgress("");
+        }, 2000);
+        return;
+      }
+      
+      // Delete transactions in batches to avoid rate limit
+      const batchSize = 8;
+      const delayMs = 2100;
+      let deleted = 0;
+      
+      for (let i = 0; i < txns.length; i += batchSize) {
+        const batch = txns.slice(i, i + batchSize);
+        
+        setUploadProgress(`Deleting transactions... ${deleted}/${totalToDelete}`);
+        
+        await Promise.all(
+          batch.map((txn: any) =>
+            fetch(
+              `https://x8ki-letl-twmt.n7.xano.io/api:vRdkZVBj/transactions/${txn.id}`,
+              { method: "DELETE" }
+            ).catch(() => {}) // Ignore individual errors
+          )
+        );
+        
+        deleted += batch.length;
+        
+        if (i + batchSize < txns.length) {
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+        }
+      }
+      
+      setUploadProgress(`Deleted ${totalToDelete} transactions!`);
+      await refresh();
+      
+      setTimeout(() => {
+        setClearing(false);
+        setUploadProgress("");
+      }, 2000);
+    } catch (e: any) {
+      setError(e?.message || "Failed to clear data");
+      setClearing(false);
+      setUploadProgress("");
+    }
+  }
 
   async function handleFileUpload(accountType: AccountType, file: File) {
     if (!userId) return;
@@ -491,7 +569,32 @@ export default function TransactionsPage() {
 
       {/* Upload Section */}
       <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 16, padding: 20, marginBottom: 24 }}>
-        <h3 style={{ margin: "0 0 16px", fontSize: 16, fontWeight: 600 }}>📤 Upload Bank Statements</h3>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>📤 Upload Bank Statements</h3>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {clearing && uploadProgress && (
+              <span style={{ fontSize: 13, color: "#6366f1" }}>{uploadProgress}</span>
+            )}
+            {transactions.length > 0 && (
+              <button
+                onClick={handleClearAllData}
+                disabled={clearing || uploadingAccount !== null}
+                style={{
+                  padding: "8px 16px",
+                  fontSize: 13,
+                  border: "1px solid #fecaca",
+                  borderRadius: 8,
+                  background: clearing ? "#fee2e2" : "#fef2f2",
+                  color: "#dc2626",
+                  cursor: clearing || uploadingAccount ? "not-allowed" : "pointer",
+                  opacity: clearing || uploadingAccount ? 0.7 : 1,
+                }}
+              >
+                {clearing ? "Clearing..." : "🗑️ Clear All Data"}
+              </button>
+            )}
+          </div>
+        </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
           <UploadCard
             label="Checking"

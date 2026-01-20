@@ -24,12 +24,21 @@ import {
   Bill,
   BillPayment,
   Transaction,
+  AccountBalances,
+  PayrollSettings,
+  MonthlyExpenses,
   createBill,
   updateBill,
   listBillPayments,
   listBills,
   listTransactions,
   upsertBillPayment,
+  getAccountBalances,
+  upsertAccountBalances,
+  getPayrollSettings,
+  upsertPayrollSettings,
+  getMonthlyExpenses,
+  upsertMonthlyExpenses,
 } from "@/lib/xano/endpoints";
 
 function getUserId(): string {
@@ -76,6 +85,14 @@ export default function BillsPage() {
   const [savingNewBill, setSavingNewBill] = useState(false);
   const [sortBy, setSortBy] = useState<"day" | "amount">("day");
 
+  // Account balances state
+  const [accountBalances, setAccountBalances] = useState<AccountBalances | null>(null);
+  const [payrollSettings, setPayrollSettings] = useState<PayrollSettings | null>(null);
+  const [monthlyExpenses, setMonthlyExpenses] = useState<MonthlyExpenses | null>(null);
+  const [savingBalances, setSavingBalances] = useState(false);
+  const [savingExpenses, setSavingExpenses] = useState(false);
+  const [showPayrollSetup, setShowPayrollSetup] = useState(false);
+
   useEffect(() => {
     const token = getAuthToken();
     const id = getUserId();
@@ -91,6 +108,9 @@ export default function BillsPage() {
       setBills([]);
       setPayments([]);
       setTransactions([]);
+      setAccountBalances(null);
+      setPayrollSettings(null);
+      setMonthlyExpenses(null);
       setLoading(false);
       return;
     }
@@ -98,18 +118,57 @@ export default function BillsPage() {
     setLoading(true);
     setError("");
     try {
-      const [b, p, t] = await Promise.all([
+      const [b, p, t, ab, ps, me] = await Promise.all([
         listBills({ userId }),
         listBillPayments({ userId, month }),
         listTransactions({ userId, month }),
+        getAccountBalances({ userId }).catch(() => null),
+        getPayrollSettings({ userId }).catch(() => null),
+        getMonthlyExpenses({ userId, month }).catch(() => null),
       ]);
       setBills(b.filter((x) => x.active !== false));
       setPayments(p);
       setTransactions(t);
+      setAccountBalances(ab);
+      setPayrollSettings(ps);
+      setMonthlyExpenses(me);
+      
+      // Check if payroll should be applied (Thursday check)
+      if (ab && ps && ps.amount > 0) {
+        await checkAndApplyPayroll(ab, ps);
+      }
     } catch (e: any) {
       setError(e?.message || "Failed to load bills.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function checkAndApplyPayroll(balances: AccountBalances, payroll: PayrollSettings) {
+    const today = new Date();
+    const dayOfWeek = today.getDay(); // 0=Sun, 4=Thu
+    
+    if (dayOfWeek !== payroll.day_of_week) return;
+    
+    // Check if already applied today
+    if (balances.last_payroll_applied) {
+      const lastApplied = new Date(balances.last_payroll_applied);
+      const todayStr = today.toISOString().slice(0, 10);
+      const lastAppliedStr = lastApplied.toISOString().slice(0, 10);
+      if (todayStr === lastAppliedStr) return; // Already applied today
+    }
+    
+    // Apply payroll
+    try {
+      const updated = await upsertAccountBalances({
+        user_id: userId,
+        checking_balance: (balances.checking_balance || 0) + payroll.amount,
+        savings_balance: balances.savings_balance || 0,
+        last_payroll_applied: today.toISOString(),
+      });
+      setAccountBalances(updated);
+    } catch (e) {
+      console.error("Failed to apply payroll:", e);
     }
   }
 
@@ -348,6 +407,71 @@ export default function BillsPage() {
     router.push("/login");
   }
 
+  async function handleUpdateBalances(checking: number, savings: number) {
+    if (!userId) return;
+    setSavingBalances(true);
+    try {
+      const updated = await upsertAccountBalances({
+        user_id: userId,
+        checking_balance: checking,
+        savings_balance: savings,
+        last_payroll_applied: accountBalances?.last_payroll_applied || null,
+      });
+      setAccountBalances(updated);
+    } catch (e: any) {
+      setError(e?.message || "Failed to update balances");
+    } finally {
+      setSavingBalances(false);
+    }
+  }
+
+  async function handleUpdatePayroll(amount: number, dayOfWeek: number) {
+    if (!userId) return;
+    try {
+      const updated = await upsertPayrollSettings({
+        user_id: userId,
+        amount,
+        day_of_week: dayOfWeek,
+      });
+      setPayrollSettings(updated);
+      setShowPayrollSetup(false);
+    } catch (e: any) {
+      setError(e?.message || "Failed to update payroll settings");
+    }
+  }
+
+  async function handleUpdateExpenses(food: number, entertainment: number, other: number) {
+    if (!userId) return;
+    setSavingExpenses(true);
+    try {
+      const updated = await upsertMonthlyExpenses({
+        user_id: userId,
+        month,
+        food,
+        entertainment,
+        other,
+      });
+      setMonthlyExpenses(updated);
+    } catch (e: any) {
+      setError(e?.message || "Failed to update expenses");
+    } finally {
+      setSavingExpenses(false);
+    }
+  }
+
+  // Calculate available for high yield
+  const availableForHighYield = useMemo(() => {
+    const checking = accountBalances?.checking_balance || 0;
+    const savings = accountBalances?.savings_balance || 0;
+    const remainingBills = summary.remaining;
+    const food = monthlyExpenses?.food || 0;
+    const entertainment = monthlyExpenses?.entertainment || 0;
+    const other = monthlyExpenses?.other || 0;
+    const totalExpenses = food + entertainment + other;
+    
+    return (checking + savings) - remainingBills - totalExpenses;
+  }, [accountBalances, summary.remaining, monthlyExpenses]);
+
   return (
     <div style={{ padding: 24, maxWidth: 1100, margin: "0 auto", fontFamily: "system-ui, sans-serif" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, flexWrap: "wrap" }}>
@@ -421,6 +545,75 @@ export default function BillsPage() {
         >
           Amount
         </button>
+      </div>
+
+      {/* Account Balances Section */}
+      <div style={{ marginTop: 24, padding: 20, background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>💰 Account Balances</h3>
+          <button
+            onClick={() => setShowPayrollSetup(!showPayrollSetup)}
+            style={{
+              padding: "6px 12px",
+              fontSize: 12,
+              border: "1px solid #86efac",
+              borderRadius: 6,
+              background: "white",
+              cursor: "pointer",
+            }}
+          >
+            ⚙️ Payroll Settings
+          </button>
+        </div>
+
+        {showPayrollSetup && (
+          <PayrollSetupForm
+            currentAmount={payrollSettings?.amount || 0}
+            currentDay={payrollSettings?.day_of_week || 4}
+            onSave={handleUpdatePayroll}
+            onCancel={() => setShowPayrollSetup(false)}
+          />
+        )}
+
+        <AccountBalancesForm
+          checking={accountBalances?.checking_balance || 0}
+          savings={accountBalances?.savings_balance || 0}
+          saving={savingBalances}
+          onSave={handleUpdateBalances}
+          payrollAmount={payrollSettings?.amount || 0}
+          payrollDay={payrollSettings?.day_of_week || 4}
+        />
+
+        {/* Available for High Yield */}
+        <div style={{ marginTop: 16, padding: 16, background: "white", borderRadius: 12, border: "1px solid #bbf7d0" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <div style={{ fontSize: 13, opacity: 0.7 }}>Available for High Yield</div>
+              <div style={{ fontSize: 11, opacity: 0.5, marginTop: 2 }}>
+                (Checking + Savings) - Remaining Bills - Other Expenses
+              </div>
+            </div>
+            <div style={{ 
+              fontSize: 24, 
+              fontWeight: 700, 
+              color: availableForHighYield >= 0 ? "#10b981" : "#dc2626" 
+            }}>
+              ${formatCurrency(availableForHighYield)}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Other Expenses Section */}
+      <div style={{ marginTop: 16, padding: 16, background: "#fefce8", border: "1px solid #fde047", borderRadius: 12 }}>
+        <h4 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600 }}>🛒 Other Monthly Expenses</h4>
+        <MonthlyExpensesForm
+          food={monthlyExpenses?.food || 0}
+          entertainment={monthlyExpenses?.entertainment || 0}
+          other={monthlyExpenses?.other || 0}
+          saving={savingExpenses}
+          onSave={handleUpdateExpenses}
+        />
       </div>
 
       {error ? (
@@ -666,3 +859,237 @@ const btnStyle: React.CSSProperties = {
   cursor: "pointer",
   fontSize: 14,
 };
+
+function AccountBalancesForm({
+  checking,
+  savings,
+  saving,
+  onSave,
+  payrollAmount,
+  payrollDay,
+}: {
+  checking: number;
+  savings: number;
+  saving: boolean;
+  onSave: (checking: number, savings: number) => void;
+  payrollAmount: number;
+  payrollDay: number;
+}) {
+  const [checkingVal, setCheckingVal] = useState(checking.toString());
+  const [savingsVal, setSavingsVal] = useState(savings.toString());
+  const [addAmount, setAddAmount] = useState("");
+
+  useEffect(() => {
+    setCheckingVal(checking.toString());
+    setSavingsVal(savings.toString());
+  }, [checking, savings]);
+
+  const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+  return (
+    <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-end" }}>
+      <div style={{ flex: 1, minWidth: 150 }}>
+        <label style={{ fontSize: 12, opacity: 0.7, display: "block", marginBottom: 4 }}>Checking</label>
+        <input
+          type="number"
+          value={checkingVal}
+          onChange={(e) => setCheckingVal(e.target.value)}
+          style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 16 }}
+        />
+      </div>
+      <div style={{ flex: 1, minWidth: 150 }}>
+        <label style={{ fontSize: 12, opacity: 0.7, display: "block", marginBottom: 4 }}>Savings</label>
+        <input
+          type="number"
+          value={savingsVal}
+          onChange={(e) => setSavingsVal(e.target.value)}
+          style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 16 }}
+        />
+      </div>
+      <div style={{ flex: 1, minWidth: 150 }}>
+        <label style={{ fontSize: 12, opacity: 0.7, display: "block", marginBottom: 4 }}>Add to Checking</label>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input
+            type="number"
+            value={addAmount}
+            onChange={(e) => setAddAmount(e.target.value)}
+            placeholder="+$"
+            style={{ flex: 1, padding: "8px 12px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 16 }}
+          />
+          <button
+            onClick={() => {
+              const add = parseFloat(addAmount) || 0;
+              if (add > 0) {
+                const newChecking = (parseFloat(checkingVal) || 0) + add;
+                setCheckingVal(newChecking.toString());
+                setAddAmount("");
+              }
+            }}
+            style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #10b981", background: "#ecfdf5", cursor: "pointer" }}
+          >
+            +
+          </button>
+        </div>
+      </div>
+      <button
+        onClick={() => onSave(parseFloat(checkingVal) || 0, parseFloat(savingsVal) || 0)}
+        disabled={saving}
+        style={{
+          padding: "10px 20px",
+          borderRadius: 8,
+          border: "none",
+          background: "#10b981",
+          color: "white",
+          fontWeight: 600,
+          cursor: saving ? "wait" : "pointer",
+          opacity: saving ? 0.7 : 1,
+        }}
+      >
+        {saving ? "Saving..." : "Save"}
+      </button>
+      {payrollAmount > 0 && (
+        <div style={{ fontSize: 11, opacity: 0.6, width: "100%", marginTop: 4 }}>
+          Auto-adds ${formatCurrency(payrollAmount)} every {dayNames[payrollDay]}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PayrollSetupForm({
+  currentAmount,
+  currentDay,
+  onSave,
+  onCancel,
+}: {
+  currentAmount: number;
+  currentDay: number;
+  onSave: (amount: number, day: number) => void;
+  onCancel: () => void;
+}) {
+  const [amount, setAmount] = useState(currentAmount.toString());
+  const [day, setDay] = useState(currentDay);
+
+  return (
+    <div style={{ marginBottom: 16, padding: 16, background: "white", borderRadius: 12, border: "1px solid #d1d5db" }}>
+      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Recurring Payroll Setup</div>
+      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-end" }}>
+        <div style={{ flex: 1, minWidth: 150 }}>
+          <label style={{ fontSize: 12, opacity: 0.7, display: "block", marginBottom: 4 }}>Payroll Amount</label>
+          <input
+            type="number"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="e.g. 2500"
+            style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid #d1d5db" }}
+          />
+        </div>
+        <div style={{ flex: 1, minWidth: 150 }}>
+          <label style={{ fontSize: 12, opacity: 0.7, display: "block", marginBottom: 4 }}>Pay Day</label>
+          <select
+            value={day}
+            onChange={(e) => setDay(parseInt(e.target.value))}
+            style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid #d1d5db" }}
+          >
+            <option value={0}>Sunday</option>
+            <option value={1}>Monday</option>
+            <option value={2}>Tuesday</option>
+            <option value={3}>Wednesday</option>
+            <option value={4}>Thursday</option>
+            <option value={5}>Friday</option>
+            <option value={6}>Saturday</option>
+          </select>
+        </div>
+        <button
+          onClick={() => onSave(parseFloat(amount) || 0, day)}
+          style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: "#10b981", color: "white", cursor: "pointer" }}
+        >
+          Save
+        </button>
+        <button
+          onClick={onCancel}
+          style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid #d1d5db", background: "white", cursor: "pointer" }}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function MonthlyExpensesForm({
+  food,
+  entertainment,
+  other,
+  saving,
+  onSave,
+}: {
+  food: number;
+  entertainment: number;
+  other: number;
+  saving: boolean;
+  onSave: (food: number, entertainment: number, other: number) => void;
+}) {
+  const [foodVal, setFoodVal] = useState(food.toString());
+  const [entertainmentVal, setEntertainmentVal] = useState(entertainment.toString());
+  const [otherVal, setOtherVal] = useState(other.toString());
+
+  useEffect(() => {
+    setFoodVal(food.toString());
+    setEntertainmentVal(entertainment.toString());
+    setOtherVal(other.toString());
+  }, [food, entertainment, other]);
+
+  const total = (parseFloat(foodVal) || 0) + (parseFloat(entertainmentVal) || 0) + (parseFloat(otherVal) || 0);
+
+  return (
+    <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+      <div style={{ minWidth: 100 }}>
+        <label style={{ fontSize: 11, opacity: 0.7, display: "block", marginBottom: 4 }}>🍔 Food</label>
+        <input
+          type="number"
+          value={foodVal}
+          onChange={(e) => setFoodVal(e.target.value)}
+          style={{ width: "100%", padding: "6px 10px", borderRadius: 6, border: "1px solid #d1d5db", fontSize: 14 }}
+        />
+      </div>
+      <div style={{ minWidth: 100 }}>
+        <label style={{ fontSize: 11, opacity: 0.7, display: "block", marginBottom: 4 }}>🎬 Entertainment</label>
+        <input
+          type="number"
+          value={entertainmentVal}
+          onChange={(e) => setEntertainmentVal(e.target.value)}
+          style={{ width: "100%", padding: "6px 10px", borderRadius: 6, border: "1px solid #d1d5db", fontSize: 14 }}
+        />
+      </div>
+      <div style={{ minWidth: 100 }}>
+        <label style={{ fontSize: 11, opacity: 0.7, display: "block", marginBottom: 4 }}>📦 Other</label>
+        <input
+          type="number"
+          value={otherVal}
+          onChange={(e) => setOtherVal(e.target.value)}
+          style={{ width: "100%", padding: "6px 10px", borderRadius: 6, border: "1px solid #d1d5db", fontSize: 14 }}
+        />
+      </div>
+      <div style={{ fontSize: 13, fontWeight: 600, padding: "8px 0" }}>
+        Total: ${formatCurrency(total)}
+      </div>
+      <button
+        onClick={() => onSave(parseFloat(foodVal) || 0, parseFloat(entertainmentVal) || 0, parseFloat(otherVal) || 0)}
+        disabled={saving}
+        style={{
+          padding: "8px 16px",
+          borderRadius: 6,
+          border: "none",
+          background: "#eab308",
+          color: "white",
+          fontWeight: 600,
+          cursor: saving ? "wait" : "pointer",
+          opacity: saving ? 0.7 : 1,
+        }}
+      >
+        {saving ? "..." : "Save"}
+      </button>
+    </div>
+  );
+}

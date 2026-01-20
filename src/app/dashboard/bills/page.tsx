@@ -74,6 +74,7 @@ export default function BillsPage() {
   const [expandedBillId, setExpandedBillId] = useState<number | null>(null);
   const [savingPaymentIds, setSavingPaymentIds] = useState<Set<number>>(new Set());
   const [savingNewBill, setSavingNewBill] = useState(false);
+  const [sortBy, setSortBy] = useState<"day" | "amount">("day");
 
   useEffect(() => {
     const token = getAuthToken();
@@ -139,7 +140,14 @@ export default function BillsPage() {
   const rows: BillsTableRow[] = useMemo(() => {
     return bills
       .slice()
-      .sort((a, b) => (a.due_day ?? 99) - (b.due_day ?? 99))
+      .sort((a, b) => {
+        if (sortBy === "day") {
+          return (a.due_day ?? 99) - (b.due_day ?? 99);
+        } else {
+          // Sort by amount descending (highest first)
+          return (b.amount_expected ?? 0) - (a.amount_expected ?? 0);
+        }
+      })
       .map((bill) => {
         const p = paymentsByBillId.get(bill.id);
         const linkedTxns = transactionsByBillId.get(bill.id) || [];
@@ -164,7 +172,7 @@ export default function BillsPage() {
           },
         };
       });
-  }, [bills, paymentsByBillId, transactionsByBillId]);
+  }, [bills, paymentsByBillId, transactionsByBillId, sortBy]);
 
   const summary = useMemo(() => {
     // Expected = sum of all monthly bill amounts (static amount_expected)
@@ -380,6 +388,39 @@ export default function BillsPage() {
         <Stat label="Expected" value={summary.totalExpected} />
         <Stat label="Paid" value={summary.totalPaid} />
         <Stat label="Remaining" value={summary.remaining} highlight={summary.remaining > 0} />
+      </div>
+
+      {/* Sort Controls */}
+      <div style={{ display: "flex", gap: 8, marginTop: 16, alignItems: "center" }}>
+        <span style={{ fontSize: 13, opacity: 0.6 }}>Sort by:</span>
+        <button
+          onClick={() => setSortBy("day")}
+          style={{
+            padding: "6px 12px",
+            fontSize: 13,
+            border: "1px solid #e2e8f0",
+            borderRadius: 6,
+            background: sortBy === "day" ? "#f1f5f9" : "white",
+            fontWeight: sortBy === "day" ? 600 : 400,
+            cursor: "pointer",
+          }}
+        >
+          Due Day
+        </button>
+        <button
+          onClick={() => setSortBy("amount")}
+          style={{
+            padding: "6px 12px",
+            fontSize: 13,
+            border: "1px solid #e2e8f0",
+            borderRadius: 6,
+            background: sortBy === "amount" ? "#f1f5f9" : "white",
+            fontWeight: sortBy === "amount" ? 600 : 400,
+            cursor: "pointer",
+          }}
+        >
+          Amount
+        </button>
       </div>
 
       {error ? (

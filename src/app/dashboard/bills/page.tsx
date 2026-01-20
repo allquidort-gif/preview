@@ -314,7 +314,12 @@ export default function BillsPage() {
               →
             </button>
           </div>
-
+<button
+  onClick={() => router.push("/dashboard/transactions")}
+  style={{ height: 36, padding: "0 12px", borderRadius: 10, border: "1px solid #ddd", background: "white", cursor: "pointer" }}
+>
+  💸 Transactions
+</button>
           <button
             onClick={() => setShowAdd(true)}
             style={{ height: 36, padding: "0 12px", borderRadius: 10, border: "1px solid #ddd", background: "white", cursor: "pointer" }}

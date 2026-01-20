@@ -134,7 +134,7 @@ export default function BillsPage() {
       setMonthlyExpenses(me);
       
       // Check if payroll should be applied (Thursday check)
-      if (ab && ps && ps.amount > 0) {
+      if (ab && ps && (ps.checking_amount > 0 || ps.savings_amount > 0)) {
         await checkAndApplyPayroll(ab, ps);
       }
     } catch (e: any) {
@@ -158,12 +158,12 @@ export default function BillsPage() {
       if (todayStr === lastAppliedStr) return; // Already applied today
     }
     
-    // Apply payroll
+    // Apply payroll to both checking and savings
     try {
       const updated = await upsertAccountBalances({
         user_id: userId,
-        checking_balance: (balances.checking_balance || 0) + payroll.amount,
-        savings_balance: balances.savings_balance || 0,
+        checking_balance: (balances.checking_balance || 0) + (payroll.checking_amount || 0),
+        savings_balance: (balances.savings_balance || 0) + (payroll.savings_amount || 0),
         last_payroll_applied: today.toISOString(),
       });
       setAccountBalances(updated);
@@ -425,12 +425,13 @@ export default function BillsPage() {
     }
   }
 
-  async function handleUpdatePayroll(amount: number, dayOfWeek: number) {
+  async function handleUpdatePayroll(checkingAmount: number, savingsAmount: number, dayOfWeek: number) {
     if (!userId) return;
     try {
       const updated = await upsertPayrollSettings({
         user_id: userId,
-        amount,
+        checking_amount: checkingAmount,
+        savings_amount: savingsAmount,
         day_of_week: dayOfWeek,
       });
       setPayrollSettings(updated);
@@ -568,7 +569,8 @@ export default function BillsPage() {
 
         {showPayrollSetup && (
           <PayrollSetupForm
-            currentAmount={payrollSettings?.amount || 0}
+            currentCheckingAmount={payrollSettings?.checking_amount || 0}
+            currentSavingsAmount={payrollSettings?.savings_amount || 0}
             currentDay={payrollSettings?.day_of_week || 4}
             onSave={handleUpdatePayroll}
             onCancel={() => setShowPayrollSetup(false)}
@@ -580,7 +582,8 @@ export default function BillsPage() {
           savings={accountBalances?.savings_balance || 0}
           saving={savingBalances}
           onSave={handleUpdateBalances}
-          payrollAmount={payrollSettings?.amount || 0}
+          payrollCheckingAmount={payrollSettings?.checking_amount || 0}
+          payrollSavingsAmount={payrollSettings?.savings_amount || 0}
           payrollDay={payrollSettings?.day_of_week || 4}
         />
 
@@ -865,14 +868,16 @@ function AccountBalancesForm({
   savings,
   saving,
   onSave,
-  payrollAmount,
+  payrollCheckingAmount,
+  payrollSavingsAmount,
   payrollDay,
 }: {
   checking: number;
   savings: number;
   saving: boolean;
   onSave: (checking: number, savings: number) => void;
-  payrollAmount: number;
+  payrollCheckingAmount: number;
+  payrollSavingsAmount: number;
   payrollDay: number;
 }) {
   const [checkingVal, setCheckingVal] = useState(checking.toString());
@@ -885,6 +890,7 @@ function AccountBalancesForm({
   }, [checking, savings]);
 
   const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const totalPayroll = payrollCheckingAmount + payrollSavingsAmount;
 
   return (
     <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-end" }}>
@@ -947,9 +953,9 @@ function AccountBalancesForm({
       >
         {saving ? "Saving..." : "Save"}
       </button>
-      {payrollAmount > 0 && (
+      {totalPayroll > 0 && (
         <div style={{ fontSize: 11, opacity: 0.6, width: "100%", marginTop: 4 }}>
-          Auto-adds ${formatCurrency(payrollAmount)} every {dayNames[payrollDay]}
+          Auto-adds ${formatCurrency(payrollCheckingAmount)} to checking + ${formatCurrency(payrollSavingsAmount)} to savings every {dayNames[payrollDay]}
         </div>
       )}
     </div>
@@ -957,34 +963,47 @@ function AccountBalancesForm({
 }
 
 function PayrollSetupForm({
-  currentAmount,
+  currentCheckingAmount,
+  currentSavingsAmount,
   currentDay,
   onSave,
   onCancel,
 }: {
-  currentAmount: number;
+  currentCheckingAmount: number;
+  currentSavingsAmount: number;
   currentDay: number;
-  onSave: (amount: number, day: number) => void;
+  onSave: (checkingAmount: number, savingsAmount: number, day: number) => void;
   onCancel: () => void;
 }) {
-  const [amount, setAmount] = useState(currentAmount.toString());
+  const [checkingAmount, setCheckingAmount] = useState(currentCheckingAmount.toString());
+  const [savingsAmount, setSavingsAmount] = useState(currentSavingsAmount.toString());
   const [day, setDay] = useState(currentDay);
 
   return (
     <div style={{ marginBottom: 16, padding: 16, background: "white", borderRadius: 12, border: "1px solid #d1d5db" }}>
       <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Recurring Payroll Setup</div>
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-end" }}>
-        <div style={{ flex: 1, minWidth: 150 }}>
-          <label style={{ fontSize: 12, opacity: 0.7, display: "block", marginBottom: 4 }}>Payroll Amount</label>
+        <div style={{ flex: 1, minWidth: 120 }}>
+          <label style={{ fontSize: 12, opacity: 0.7, display: "block", marginBottom: 4 }}>To Checking</label>
           <input
             type="number"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="e.g. 2500"
+            value={checkingAmount}
+            onChange={(e) => setCheckingAmount(e.target.value)}
+            placeholder="e.g. 2000"
             style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid #d1d5db" }}
           />
         </div>
-        <div style={{ flex: 1, minWidth: 150 }}>
+        <div style={{ flex: 1, minWidth: 120 }}>
+          <label style={{ fontSize: 12, opacity: 0.7, display: "block", marginBottom: 4 }}>To Savings</label>
+          <input
+            type="number"
+            value={savingsAmount}
+            onChange={(e) => setSavingsAmount(e.target.value)}
+            placeholder="e.g. 500"
+            style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid #d1d5db" }}
+          />
+        </div>
+        <div style={{ flex: 1, minWidth: 120 }}>
           <label style={{ fontSize: 12, opacity: 0.7, display: "block", marginBottom: 4 }}>Pay Day</label>
           <select
             value={day}
@@ -1001,7 +1020,7 @@ function PayrollSetupForm({
           </select>
         </div>
         <button
-          onClick={() => onSave(parseFloat(amount) || 0, day)}
+          onClick={() => onSave(parseFloat(checkingAmount) || 0, parseFloat(savingsAmount) || 0, day)}
           style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: "#10b981", color: "white", cursor: "pointer" }}
         >
           Save

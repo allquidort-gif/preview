@@ -283,25 +283,29 @@ export default function TransactionsPage() {
 
       setUploadProgress("Processing transactions...");
 
-      // Create processed transactions
-      for (const p of parsed) {
-        const txnType = detectTransactionType(p.description, p.amount, p.bank_category);
-        await createTransaction({
-          user_id: userId,
-          date: p.date,
-          merchant: extractMerchant(p.description),
-          description: p.description,
-          amount: p.amount,
-          category_id: 0, // Will be assigned later
-          account_id: 0, // Will be linked to balance account
-          import_id: importRecord.id!,
-          is_split: false,
-          notes: "",
-          is_recurring: txnType === "recurring",
-          bill_id: null,
-          transaction_type: txnType as any,
-        });
-      }
+// NEW CODE - bulk insert all at once
+setUploadProgress("Processing transactions...");
+
+const txnData = parsed.map((p) => {
+  const txnType = detectTransactionType(p.description, p.amount, p.bank_category);
+  return {
+    user_id: parseInt(userId),
+    date: p.date,
+    merchant: extractMerchant(p.description),
+    description: p.description,
+    amount: p.amount,
+    category_id: 0,
+    account_id: 0,
+    import_id: importRecord.id!,
+    is_split: false,
+    notes: "",
+    is_recurring: txnType === "recurring",
+    bill_id: null,
+    transaction_type: txnType,
+  };
+});
+
+await createTransactionsBulk({ user_id: parseInt(userId), transactions: txnData });
 
       setUploadProgress(`Imported ${parsed.length} transactions!`);
       await refresh();

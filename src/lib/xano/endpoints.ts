@@ -261,6 +261,13 @@ export async function createCategory(input: Omit<Category, "id">) {
   return xanoFetch<Category>(`/categories`, { method: "POST", body: input });
 }
 
+export async function createTransactionsBulk(input: { user_id: number; transactions: any[] }) {
+  return xanoFetch<{ success: boolean; count: number }>(`/transactions/bulk`, {
+    method: "POST",
+    body: input,
+  });
+}
+
 // ============ DASHBOARD ============
 
 export async function getDashboardMonthly({ userId, month }: { userId: string; month: string }) {

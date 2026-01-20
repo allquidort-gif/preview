@@ -3,16 +3,32 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import BillsTable, { BillsTableRow } from "@/components/bills/BillsTable";
 import AddBillForm, { NewBillInput } from "@/components/bills/AddBillForm";
 import EditBillForm from "@/components/bills/EditBillForm";
+
+// Extended row type with linked transactions
+interface BillsTableRow {
+  bill: Bill;
+  payment: BillPayment | null;
+  linkedTransactions: Transaction[];
+  computed: {
+    paid: boolean;
+    dueDay: number | null;
+    expectedAmount: number | null;
+    amountPaid: number | null;
+    actualFromTxns: number;
+    transactionCount: number;
+  };
+}
 import {
   Bill,
   BillPayment,
+  Transaction,
   createBill,
   updateBill,
   listBillPayments,
   listBills,
+  listTransactions,
   upsertBillPayment,
 } from "@/lib/xano/endpoints";
 
@@ -49,11 +65,13 @@ export default function BillsPage() {
 
   const [bills, setBills] = useState<Bill[]>([]);
   const [payments, setPayments] = useState<BillPayment[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>("");
 
   const [showAdd, setShowAdd] = useState(false);
   const [editingBill, setEditingBill] = useState<Bill | null>(null);
+  const [expandedBillId, setExpandedBillId] = useState<number | null>(null);
   const [savingPaymentIds, setSavingPaymentIds] = useState<Set<number>>(new Set());
   const [savingNewBill, setSavingNewBill] = useState(false);
 
@@ -71,6 +89,7 @@ export default function BillsPage() {
     if (!userId) {
       setBills([]);
       setPayments([]);
+      setTransactions([]);
       setLoading(false);
       return;
     }
@@ -78,9 +97,14 @@ export default function BillsPage() {
     setLoading(true);
     setError("");
     try {
-      const [b, p] = await Promise.all([listBills({ userId }), listBillPayments({ userId, month })]);
+      const [b, p, t] = await Promise.all([
+        listBills({ userId }),
+        listBillPayments({ userId, month }),
+        listTransactions({ userId, month }),
+      ]);
       setBills(b.filter((x) => x.active !== false));
       setPayments(p);
+      setTransactions(t);
     } catch (e: any) {
       setError(e?.message || "Failed to load bills.");
     } finally {
@@ -99,34 +123,56 @@ export default function BillsPage() {
     return map;
   }, [payments]);
 
+  // Group transactions by bill_id
+  const transactionsByBillId = useMemo(() => {
+    const map = new Map<number, Transaction[]>();
+    for (const t of transactions) {
+      if (t.bill_id) {
+        const existing = map.get(t.bill_id) || [];
+        existing.push(t);
+        map.set(t.bill_id, existing);
+      }
+    }
+    return map;
+  }, [transactions]);
+
   const rows: BillsTableRow[] = useMemo(() => {
     return bills
       .slice()
       .sort((a, b) => (a.due_day ?? 99) - (b.due_day ?? 99))
       .map((bill) => {
         const p = paymentsByBillId.get(bill.id);
+        const linkedTxns = transactionsByBillId.get(bill.id) || [];
         const paid = p?.paid ?? false;
         const expected = bill.amount_expected ?? null;
         const amountPaid = p?.amount_paid ?? null;
 
+        // Calculate actual amount from linked transactions this month
+        const actualFromTxns = linkedTxns.reduce((sum, t) => sum + Math.abs(t.amount), 0);
+
         return {
           bill,
           payment: p ?? null,
+          linkedTransactions: linkedTxns,
           computed: {
             paid,
             dueDay: bill.due_day ?? null,
             expectedAmount: expected,
             amountPaid,
+            actualFromTxns,
+            transactionCount: linkedTxns.length,
           },
         };
       });
-  }, [bills, paymentsByBillId]);
+  }, [bills, paymentsByBillId, transactionsByBillId]);
 
   const summary = useMemo(() => {
     const totalExpected = rows.reduce((sum, r) => sum + (r.bill.amount_expected ?? 0), 0);
     const totalPaid = rows.reduce((sum, r) => sum + (r.payment?.amount_paid ?? (r.payment?.paid ? (r.bill.amount_expected ?? 0) : 0)), 0);
+    const totalFromTxns = rows.reduce((sum, r) => sum + (r.computed.actualFromTxns ?? 0), 0);
     const remaining = Math.max(0, totalExpected - totalPaid);
-    return { totalExpected, totalPaid, remaining };
+    const linkedTxnCount = rows.reduce((sum, r) => sum + r.computed.transactionCount, 0);
+    return { totalExpected, totalPaid, totalFromTxns, remaining, linkedTxnCount };
   }, [rows]);
 
   function goToPrevMonth() {
@@ -211,9 +257,15 @@ export default function BillsPage() {
     try {
       const bill = bills.find((b) => b.id === billId);
       const existing = paymentsByBillId.get(billId);
+      const linkedTxns = transactionsByBillId.get(billId) || [];
+
+      // Use actual transaction total if available, otherwise use expected
+      const actualAmount = linkedTxns.length > 0
+        ? linkedTxns.reduce((sum, t) => sum + Math.abs(t.amount), 0)
+        : null;
 
       const amount_paid = nextPaid
-        ? (existing?.amount_paid ?? bill?.amount_expected ?? null)
+        ? (existing?.amount_paid ?? actualAmount ?? bill?.amount_expected ?? null)
         : null;
 
       const paid_date = nextPaid
@@ -283,10 +335,10 @@ export default function BillsPage() {
   }
 
   return (
-    <div style={{ padding: 24, maxWidth: 1100, margin: "0 auto" }}>
+    <div style={{ padding: 24, maxWidth: 1100, margin: "0 auto", fontFamily: "system-ui, sans-serif" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, flexWrap: "wrap" }}>
         <div>
-          <h1 style={{ fontSize: 22, margin: 0 }}>Monthly Bills</h1>
+          <h1 style={{ fontSize: 22, margin: 0, fontWeight: 700 }}>📋 Monthly Bills</h1>
           <p style={{ margin: "6px 0 0", opacity: 0.75 }}>
             Track recurring bills and mark them paid for <strong>{formatMonthLabel(month)}</strong>.
           </p>
@@ -295,69 +347,66 @@ export default function BillsPage() {
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           {/* Month navigation */}
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <button
-              onClick={goToPrevMonth}
-              style={{ height: 36, width: 36, borderRadius: 8, border: "1px solid #ddd", background: "white", cursor: "pointer", fontSize: 18 }}
-            >
-              ←
-            </button>
-            <button
-              onClick={goToCurrentMonth}
-              style={{ height: 36, padding: "0 12px", borderRadius: 8, border: "1px solid #ddd", background: "white", cursor: "pointer", fontSize: 13 }}
-            >
-              Today
-            </button>
-            <button
-              onClick={goToNextMonth}
-              style={{ height: 36, width: 36, borderRadius: 8, border: "1px solid #ddd", background: "white", cursor: "pointer", fontSize: 18 }}
-            >
-              →
-            </button>
+            <button onClick={goToPrevMonth} style={navBtnStyle}>←</button>
+            <button onClick={goToCurrentMonth} style={{ ...navBtnStyle, padding: "0 12px", width: "auto" }}>Today</button>
+            <button onClick={goToNextMonth} style={navBtnStyle}>→</button>
           </div>
-<button
-  onClick={() => router.push("/dashboard/transactions")}
-  style={{ height: 36, padding: "0 12px", borderRadius: 10, border: "1px solid #ddd", background: "white", cursor: "pointer" }}
->
-  💸 Transactions
-</button>
+
           <button
-            onClick={() => setShowAdd(true)}
-            style={{ height: 36, padding: "0 12px", borderRadius: 10, border: "1px solid #ddd", background: "white", cursor: "pointer" }}
+            onClick={() => router.push("/dashboard/transactions")}
+            style={btnStyle}
           >
+            💸 Transactions
+          </button>
+
+          <button onClick={() => setShowAdd(true)} style={btnStyle}>
             + Add bill
           </button>
 
-          <button
-            onClick={handleLogout}
-            style={{ height: 36, padding: "0 12px", borderRadius: 10, border: "1px solid #ddd", background: "white", cursor: "pointer", opacity: 0.7 }}
-          >
+          <button onClick={handleLogout} style={{ ...btnStyle, opacity: 0.7 }}>
             Logout
           </button>
         </div>
       </div>
 
+      {/* Summary Stats */}
       <div style={{ display: "flex", gap: 12, marginTop: 16, flexWrap: "wrap" }}>
         <Stat label="Expected" value={summary.totalExpected} />
         <Stat label="Paid" value={summary.totalPaid} />
-        <Stat label="Remaining" value={summary.remaining} />
+        <Stat label="Remaining" value={summary.remaining} highlight={summary.remaining > 0} />
+        <Stat label="From Transactions" value={summary.totalFromTxns} subtitle={`${summary.linkedTxnCount} linked`} />
       </div>
 
       {error ? (
-        <div style={{ marginTop: 14, padding: 12, border: "1px solid #f1c0c0", borderRadius: 10, background: "#fff7f7" }}>
-          <div style={{ fontWeight: 600 }}>Heads up</div>
-          <div style={{ marginTop: 6, whiteSpace: "pre-wrap" }}>{error}</div>
+        <div style={{ marginTop: 14, padding: 12, border: "1px solid #fecaca", borderRadius: 10, background: "#fef2f2", color: "#dc2626" }}>
+          {error}
         </div>
       ) : null}
 
+      {/* Bills List */}
       <div style={{ marginTop: 18 }}>
-        <BillsTable
-          rows={rows}
-          loading={loading}
-          savingPaymentIds={savingPaymentIds}
-          onTogglePaid={handleTogglePaid}
-          onUpdatePaymentField={handleUpdatePaymentField}
-          onEditBill={(bill) => setEditingBill(bill)}
-        />
+        {loading ? (
+          <div style={{ padding: 20, textAlign: "center", opacity: 0.7 }}>Loading bills...</div>
+        ) : rows.length === 0 ? (
+          <div style={{ padding: 40, textAlign: "center", border: "1px dashed #e2e8f0", borderRadius: 16 }}>
+            <p style={{ margin: 0, opacity: 0.7 }}>No bills yet. Add a bill or import transactions to get started!</p>
+          </div>
+        ) : (
+          <div style={{ border: "1px solid #e2e8f0", borderRadius: 16, overflow: "hidden" }}>
+            {rows.map((row, idx) => (
+              <BillRow
+                key={row.bill.id}
+                row={row}
+                isLast={idx === rows.length - 1}
+                isExpanded={expandedBillId === row.bill.id}
+                onToggleExpand={() => setExpandedBillId(expandedBillId === row.bill.id ? null : row.bill.id)}
+                saving={savingPaymentIds.has(row.bill.id)}
+                onTogglePaid={handleTogglePaid}
+                onEdit={() => setEditingBill(row.bill)}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       <AddBillForm
@@ -379,11 +428,191 @@ export default function BillsPage() {
   );
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
+// ============ COMPONENTS ============
+
+function Stat({ label, value, subtitle, highlight }: { label: string; value: number; subtitle?: string; highlight?: boolean }) {
   return (
-    <div style={{ border: "1px solid #eee", borderRadius: 14, padding: 12, minWidth: 160 }}>
+    <div style={{ 
+      border: "1px solid #e2e8f0", 
+      borderRadius: 14, 
+      padding: 12, 
+      minWidth: 140,
+      background: highlight ? "#fef2f2" : "white"
+    }}>
       <div style={{ fontSize: 12, opacity: 0.7 }}>{label}</div>
-      <div style={{ fontSize: 18, marginTop: 4 }}>${value.toFixed(2)}</div>
+      <div style={{ fontSize: 18, marginTop: 4, fontWeight: 600, color: highlight ? "#dc2626" : "inherit" }}>
+        ${value.toFixed(2)}
+      </div>
+      {subtitle && (
+        <div style={{ fontSize: 11, opacity: 0.5, marginTop: 2 }}>{subtitle}</div>
+      )}
     </div>
   );
 }
+
+function BillRow({
+  row,
+  isLast,
+  isExpanded,
+  onToggleExpand,
+  saving,
+  onTogglePaid,
+  onEdit,
+}: {
+  row: BillsTableRow;
+  isLast: boolean;
+  isExpanded: boolean;
+  onToggleExpand: () => void;
+  saving: boolean;
+  onTogglePaid: (billId: number, nextPaid: boolean) => void;
+  onEdit: () => void;
+}) {
+  const { bill, payment, linkedTransactions, computed } = row;
+  const isPaid = computed.paid;
+  const hasLinkedTxns = linkedTransactions.length > 0;
+
+  return (
+    <div style={{ borderBottom: isLast ? "none" : "1px solid #f1f5f9" }}>
+      {/* Main Row */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 16,
+          padding: "14px 16px",
+          background: isPaid ? "#f0fdf4" : "white",
+        }}
+      >
+        {/* Checkbox */}
+        <button
+          onClick={() => onTogglePaid(bill.id, !isPaid)}
+          disabled={saving}
+          style={{
+            width: 24,
+            height: 24,
+            borderRadius: 6,
+            border: isPaid ? "2px solid #10b981" : "2px solid #d1d5db",
+            background: isPaid ? "#10b981" : "white",
+            cursor: saving ? "wait" : "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "white",
+            fontSize: 14,
+            flexShrink: 0,
+          }}
+        >
+          {isPaid ? "✓" : ""}
+        </button>
+
+        {/* Bill Name & Due Day */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontWeight: 500, textDecoration: isPaid ? "line-through" : "none", opacity: isPaid ? 0.6 : 1 }}>
+              {bill.name}
+            </span>
+            {hasLinkedTxns && (
+              <button
+                onClick={onToggleExpand}
+                style={{
+                  fontSize: 10,
+                  padding: "2px 6px",
+                  background: "#e0f2fe",
+                  color: "#0369a1",
+                  borderRadius: 4,
+                  border: "none",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                }}
+              >
+                {linkedTransactions.length} txn{linkedTransactions.length > 1 ? "s" : ""} {isExpanded ? "▲" : "▼"}
+              </button>
+            )}
+          </div>
+          <div style={{ fontSize: 12, opacity: 0.6, marginTop: 2 }}>
+            Due day {bill.due_day ?? "—"}
+            {bill.autopay && " • Autopay"}
+            {bill.is_variable && " • Variable"}
+          </div>
+        </div>
+
+        {/* Amounts */}
+        <div style={{ textAlign: "right", minWidth: 100 }}>
+          <div style={{ fontWeight: 600, fontSize: 16 }}>
+            ${(computed.expectedAmount ?? 0).toFixed(2)}
+          </div>
+          {hasLinkedTxns && computed.actualFromTxns !== computed.expectedAmount && (
+            <div style={{ fontSize: 11, color: "#6366f1" }}>
+              Actual: ${computed.actualFromTxns.toFixed(2)}
+            </div>
+          )}
+        </div>
+
+        {/* Edit Button */}
+        <button
+          onClick={onEdit}
+          style={{
+            padding: "6px 10px",
+            fontSize: 12,
+            border: "1px solid #e2e8f0",
+            borderRadius: 6,
+            background: "white",
+            cursor: "pointer",
+          }}
+        >
+          Edit
+        </button>
+      </div>
+
+      {/* Expanded Transactions */}
+      {isExpanded && hasLinkedTxns && (
+        <div style={{ background: "#f8fafc", padding: "8px 16px 12px 56px", borderTop: "1px solid #e2e8f0" }}>
+          <div style={{ fontSize: 11, fontWeight: 600, opacity: 0.5, marginBottom: 8 }}>LINKED TRANSACTIONS</div>
+          {linkedTransactions.map((txn) => (
+            <div
+              key={txn.id}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "6px 0",
+                fontSize: 13,
+                borderBottom: "1px solid #e2e8f0",
+              }}
+            >
+              <div>
+                <span style={{ opacity: 0.6 }}>{new Date(txn.date).toLocaleDateString()}</span>
+                <span style={{ marginLeft: 12 }}>{txn.merchant || txn.description.substring(0, 30)}</span>
+              </div>
+              <div style={{ fontWeight: 500, color: "#dc2626" }}>
+                -${Math.abs(txn.amount).toFixed(2)}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============ STYLES ============
+
+const navBtnStyle: React.CSSProperties = {
+  height: 36,
+  width: 36,
+  borderRadius: 8,
+  border: "1px solid #e2e8f0",
+  background: "white",
+  cursor: "pointer",
+  fontSize: 18,
+};
+
+const btnStyle: React.CSSProperties = {
+  height: 36,
+  padding: "0 14px",
+  borderRadius: 10,
+  border: "1px solid #e2e8f0",
+  background: "white",
+  cursor: "pointer",
+  fontSize: 14,
+};

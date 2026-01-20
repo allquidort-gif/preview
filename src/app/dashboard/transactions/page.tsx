@@ -237,72 +237,35 @@ export default function TransactionsPage() {
     if (!userId) return;
     
     const confirmed = window.confirm(
-      "Are you sure you want to delete ALL imported transactions?\n\nThis will remove:\n- All transactions\n- All raw transaction data\n- All import records\n\nThis may take a moment due to API rate limits."
+      "Are you sure you want to delete ALL imported transactions?\n\nThis will remove:\n- All transactions\n- All raw transaction data\n- All import records"
     );
     
     if (!confirmed) return;
     
     setClearing(true);
     setError("");
-    setUploadProgress("Fetching data to delete...");
+    setUploadProgress("Deleting all data...");
     
     try {
-      // Get all data IDs from the clear endpoint
+      // Use the bulk delete endpoint - does it all server-side in one call!
       const response = await fetch(
-        `https://x8ki-letl-twmt.n7.xano.io/api:vRdkZVBj/data/clear?user_id=${userId}`,
+        `https://x8ki-letl-twmt.n7.xano.io/api:vRdkZVBj/data/clear-all?user_id=${userId}`,
         { method: "DELETE" }
       );
       
       if (!response.ok) {
-        throw new Error("Failed to fetch data");
+        const errorText = await response.text();
+        throw new Error(`Failed to clear data: ${errorText}`);
       }
       
-      const result = await response.json();
-      const txns = result.data?.transactions || [];
-      const totalToDelete = txns.length;
-      
-      if (totalToDelete === 0) {
-        setUploadProgress("No transactions to delete");
-        setTimeout(() => {
-          setClearing(false);
-          setUploadProgress("");
-        }, 2000);
-        return;
-      }
-      
-      // Delete transactions in batches to avoid rate limit
-      const batchSize = 8;
-      const delayMs = 2100;
-      let deleted = 0;
-      
-      for (let i = 0; i < txns.length; i += batchSize) {
-        const batch = txns.slice(i, i + batchSize);
-        
-        setUploadProgress(`Deleting transactions... ${deleted}/${totalToDelete}`);
-        
-        await Promise.all(
-          batch.map((txn: any) =>
-            fetch(
-              `https://x8ki-letl-twmt.n7.xano.io/api:vRdkZVBj/transactions/${txn.id}`,
-              { method: "DELETE" }
-            ).catch(() => {}) // Ignore individual errors
-          )
-        );
-        
-        deleted += batch.length;
-        
-        if (i + batchSize < txns.length) {
-          await new Promise((resolve) => setTimeout(resolve, delayMs));
-        }
-      }
-      
-      setUploadProgress(`Deleted ${totalToDelete} transactions!`);
+      setUploadProgress("Done! Refreshing...");
       await refresh();
       
+      setUploadProgress("All data cleared!");
       setTimeout(() => {
         setClearing(false);
         setUploadProgress("");
-      }, 2000);
+      }, 1500);
     } catch (e: any) {
       setError(e?.message || "Failed to clear data");
       setClearing(false);

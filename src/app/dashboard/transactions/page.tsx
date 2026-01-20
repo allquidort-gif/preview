@@ -5,14 +5,13 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   Transaction,
-  TransactionRaw,
   Bill,
   listTransactions,
   listBills,
   createBill,
   createTransactionsRaw,
   createImport,
-  createTransaction,
+  createTransactionsBulk,
   markTransactionRecurring,
 } from "@/lib/xano/endpoints";
 
@@ -75,13 +74,11 @@ function parseCSVLine(line: string): string[] {
 }
 
 function parseBankAmount(amountStr: string): number {
-  // Remove $, quotes, and commas, then parse
   const cleaned = amountStr.replace(/[$",]/g, "").trim();
   return parseFloat(cleaned) || 0;
 }
 
 function parseBankDate(dateStr: string): string {
-  // Convert MM/DD/YY to YYYY-MM-DD
   const parts = dateStr.split("/");
   if (parts.length === 3) {
     const month = parts[0].padStart(2, "0");
@@ -99,14 +96,12 @@ function parseCSV(csvText: string): ParsedTransaction[] {
   const lines = csvText.split("\n").filter((line) => line.trim());
   if (lines.length < 2) return [];
 
-  // Skip header
   const transactions: ParsedTransaction[] = [];
 
   for (let i = 1; i < lines.length; i++) {
     const fields = parseCSVLine(lines[i]);
     if (fields.length < 9) continue;
 
-    // CSV columns: Account ID, Transaction ID, Date, Description, Check Number, Category, Tags, Amount, Balance
     const [accountId, transactionId, date, description, , category, , amount, balance] = fields;
 
     transactions.push({
@@ -124,7 +119,6 @@ function parseCSV(csvText: string): ParsedTransaction[] {
 }
 
 function extractMerchant(description: string): string {
-  // Try to extract a clean merchant name from bank descriptions
   const patterns = [
     /^(?:Withdrawal|Deposit|Recurring Withdrawal)?\s*(?:Debit Card|POS|ACH)?\s*(?:Debit Gold|#\d+)?\s*(.+?)\s+(?:\d{3,}|Date|Card|Entry)/i,
     /^(?:Withdrawal|Deposit)\s+(?:Online Banking )?Transfer\s+(To|From)\s+/i,
@@ -138,14 +132,12 @@ function extractMerchant(description: string): string {
     }
   }
 
-  // Fallback: just take first 50 chars
   return description.substring(0, 50);
 }
 
 function detectTransactionType(description: string, amount: number, bankCategory: string): string {
   const desc = description.toLowerCase();
 
-  // Income indicators
   if (
     desc.includes("payroll") ||
     desc.includes("deposit ach") ||
@@ -156,15 +148,10 @@ function detectTransactionType(description: string, amount: number, bankCategory
     return "income";
   }
 
-  // Transfer indicators
-  if (
-    desc.includes("transfer") ||
-    bankCategory === "Transfers"
-  ) {
+  if (desc.includes("transfer") || bankCategory === "Transfers") {
     return "transfer";
   }
 
-  // Recurring indicators (subscriptions, insurance, loans, mortgage)
   if (
     desc.includes("apple.com/bill") ||
     desc.includes("godaddy") ||
@@ -194,11 +181,9 @@ export default function TransactionsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>("");
 
-  // Upload state
   const [uploadingAccount, setUploadingAccount] = useState<AccountType | null>(null);
   const [uploadProgress, setUploadProgress] = useState<string>("");
 
-  // View state
   const [viewMode, setViewMode] = useState<"all" | "recurring" | "misc" | "income">("all");
   const [sortBy, setSortBy] = useState<"date" | "amount" | "type">("date");
 
@@ -283,29 +268,27 @@ export default function TransactionsPage() {
 
       setUploadProgress("Processing transactions...");
 
-// NEW CODE - bulk insert all at once
-setUploadProgress("Processing transactions...");
+      // Bulk insert all transactions at once (avoids rate limit)
+      const txnData = parsed.map((p) => {
+        const txnType = detectTransactionType(p.description, p.amount, p.bank_category);
+        return {
+          user_id: parseInt(userId),
+          date: p.date,
+          merchant: extractMerchant(p.description),
+          description: p.description,
+          amount: p.amount,
+          category_id: 0,
+          account_id: 0,
+          import_id: importRecord.id!,
+          is_split: false,
+          notes: "",
+          is_recurring: txnType === "recurring",
+          bill_id: null,
+          transaction_type: txnType,
+        };
+      });
 
-const txnData = parsed.map((p) => {
-  const txnType = detectTransactionType(p.description, p.amount, p.bank_category);
-  return {
-    user_id: parseInt(userId),
-    date: p.date,
-    merchant: extractMerchant(p.description),
-    description: p.description,
-    amount: p.amount,
-    category_id: 0,
-    account_id: 0,
-    import_id: importRecord.id!,
-    is_split: false,
-    notes: "",
-    is_recurring: txnType === "recurring",
-    bill_id: null,
-    transaction_type: txnType,
-  };
-});
-
-await createTransactionsBulk({ user_id: parseInt(userId), transactions: txnData });
+      await createTransactionsBulk({ user_id: parseInt(userId), transactions: txnData });
 
       setUploadProgress(`Imported ${parsed.length} transactions!`);
       await refresh();
@@ -334,7 +317,6 @@ await createTransactionsBulk({ user_id: parseInt(userId), transactions: txnData 
     if (!userId) return;
 
     try {
-      // Create a new bill based on this transaction
       const newBill = await createBill({
         user_id: userId,
         name: txn.merchant || txn.description.substring(0, 30),
@@ -345,7 +327,6 @@ await createTransactionsBulk({ user_id: parseInt(userId), transactions: txnData 
         active: true,
       });
 
-      // Link the transaction to the bill
       await markTransactionRecurring(txn.id!, newBill.id, true);
       await refresh();
     } catch (e: any) {
@@ -360,14 +341,12 @@ await createTransactionsBulk({ user_id: parseInt(userId), transactions: txnData 
       result = result.filter((t) => t.transaction_type === viewMode);
     }
 
-    // Sort
     result = [...result].sort((a, b) => {
       if (sortBy === "date") {
         return new Date(b.date).getTime() - new Date(a.date).getTime();
       } else if (sortBy === "amount") {
         return Math.abs(b.amount) - Math.abs(a.amount);
       } else {
-        // Type: recurring first, then misc, then income, then transfer
         const order = { recurring: 0, misc: 1, income: 2, transfer: 3 };
         return (order[a.transaction_type] ?? 4) - (order[b.transaction_type] ?? 4);
       }
@@ -425,7 +404,6 @@ await createTransactionsBulk({ user_id: parseInt(userId), transactions: txnData 
         </div>
 
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          {/* Month navigation */}
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
             <button onClick={goToPrevMonth} style={navBtnStyle}>←</button>
             <button onClick={() => setMonth(getMonthString(new Date()))} style={{ ...navBtnStyle, padding: "0 12px", width: "auto" }}>Today</button>
@@ -644,7 +622,6 @@ function TransactionRow({
         background: transaction.is_recurring ? "#fffbeb" : "white",
       }}
     >
-      {/* Type Badge */}
       <div
         style={{
           width: 36,
@@ -661,7 +638,6 @@ function TransactionRow({
         {typeEmojis[transaction.transaction_type] || "📝"}
       </div>
 
-      {/* Description */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {transaction.merchant || transaction.description.substring(0, 40)}
@@ -672,14 +648,12 @@ function TransactionRow({
         </div>
       </div>
 
-      {/* Bill Link */}
       {transaction.bill_id && (
         <div style={{ fontSize: 12, padding: "4px 8px", background: "#fef3c7", borderRadius: 6, color: "#92400e" }}>
           Linked to bill
         </div>
       )}
 
-      {/* Amount */}
       <div
         style={{
           fontWeight: 600,
@@ -692,7 +666,6 @@ function TransactionRow({
         {transaction.amount >= 0 ? "+" : "-"}${Math.abs(transaction.amount).toFixed(2)}
       </div>
 
-      {/* Actions */}
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
         {!transaction.is_recurring && transaction.amount < 0 && (
           <button
@@ -730,7 +703,6 @@ function TransactionRow({
         )}
       </div>
 
-      {/* Bill Selection Dropdown */}
       {showBillSelect && (
         <div
           style={{

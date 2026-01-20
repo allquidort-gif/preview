@@ -167,27 +167,17 @@ export default function BillsPage() {
   }, [bills, paymentsByBillId, transactionsByBillId]);
 
   const summary = useMemo(() => {
-    // Use actual transaction amount if available, otherwise fall back to expected
-    const totalExpected = rows.reduce((sum, r) => {
-      // If there are linked transactions, use the actual amount from those
-      if (r.computed.actualFromTxns > 0) {
-        return sum + r.computed.actualFromTxns;
-      }
-      // Otherwise use the bill's expected amount
+    // Expected = sum of all monthly bill amounts (static amount_expected)
+    const totalExpected = rows.reduce((sum, r) => sum + (r.bill.amount_expected ?? 0), 0);
+    
+    // Paid = sum of expected amounts for bills marked as paid this month
+    const totalPaid = rows.reduce((sum, r) => {
+      if (!r.computed.paid) return sum;
+      // Use the bill's expected amount (monthly obligation)
       return sum + (r.bill.amount_expected ?? 0);
     }, 0);
     
-    // For paid, use actual transaction amounts when bill is marked paid
-    const totalPaid = rows.reduce((sum, r) => {
-      if (!r.computed.paid) return sum;
-      // If paid and has linked transactions, use actual amount
-      if (r.computed.actualFromTxns > 0) {
-        return sum + r.computed.actualFromTxns;
-      }
-      // Otherwise use payment amount or expected
-      return sum + (r.payment?.amount_paid ?? r.bill.amount_expected ?? 0);
-    }, 0);
-    
+    // From Transactions = actual amount paid this month based on linked transactions
     const totalFromTxns = rows.reduce((sum, r) => sum + (r.computed.actualFromTxns ?? 0), 0);
     const remaining = Math.max(0, totalExpected - totalPaid);
     const linkedTxnCount = rows.reduce((sum, r) => sum + r.computed.transactionCount, 0);

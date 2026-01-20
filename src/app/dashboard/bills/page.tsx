@@ -265,12 +265,12 @@ export default function BillsPage() {
         : null;
 
       const amount_paid = nextPaid
-        ? (existing?.amount_paid ?? actualAmount ?? bill?.amount_expected ?? null)
-        : null;
+        ? (existing?.amount_paid ?? actualAmount ?? bill?.amount_expected ?? 0)
+        : 0;
 
       const paid_date = nextPaid
         ? (existing?.paid_date ?? new Date().toISOString().slice(0, 10))
-        : null;
+        : "";
 
       await upsertBillPayment({
         user_id: userId,
@@ -310,8 +310,8 @@ export default function BillsPage() {
         bill_id: billId,
         month,
         paid,
-        paid_date: patch.paid_date ?? existing?.paid_date ?? null,
-        amount_paid: patch.amount_paid ?? existing?.amount_paid ?? null,
+        paid_date: patch.paid_date ?? existing?.paid_date ?? "",
+        amount_paid: patch.amount_paid ?? existing?.amount_paid ?? 0,
         notes: patch.notes ?? existing?.notes ?? "",
       });
 

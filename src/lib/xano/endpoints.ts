@@ -211,11 +211,13 @@ export async function updateTransaction(id: number, patch: Partial<Transaction>)
 export async function markTransactionRecurring(
   id: number,
   billId: number | null,
-  isRecurring: boolean
+  isRecurring: boolean,
+  date: string
 ) {
   return xanoFetch<Transaction>(`/transactions/${id}`, {
     method: "PUT",
     body: {
+      date: date,
       is_recurring: isRecurring,
       bill_id: billId,
       transaction_type: isRecurring ? "recurring" : "misc",

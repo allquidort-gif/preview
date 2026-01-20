@@ -496,9 +496,9 @@ export default function TransactionsPage() {
     }
   }
 
-  async function handleMarkRecurring(txnId: number, isRecurring: boolean, billId: number | null) {
+  async function handleMarkRecurring(txnId: number, isRecurring: boolean, billId: number | null, date: string) {
     try {
-      await markTransactionRecurring(txnId, billId, isRecurring);
+      await markTransactionRecurring(txnId, billId, isRecurring, date);
       await refresh();
     } catch (e: any) {
       setError(e?.message || "Failed to update transaction");
@@ -533,8 +533,8 @@ export default function TransactionsPage() {
         });
       }
 
-      // Mark this transaction as recurring
-      await markTransactionRecurring(txn.id!, billToUse.id, true);
+      // Mark this transaction as recurring (now passing date)
+      await markTransactionRecurring(txn.id!, billToUse.id, true, txn.date);
 
       // Also mark any other transactions with the same merchant as recurring
       const normalizedMerchant = normalizeMerchant(merchantName);
@@ -547,7 +547,7 @@ export default function TransactionsPage() {
       // Mark other matching transactions (limit to avoid too many API calls)
       for (const matchTxn of matchingTxns.slice(0, 10)) {
         try {
-          await markTransactionRecurring(matchTxn.id!, billToUse.id, true);
+          await markTransactionRecurring(matchTxn.id!, billToUse.id, true, matchTxn.date);
         } catch (e) {
           console.error("Failed to mark matching transaction:", e);
         }
@@ -896,7 +896,7 @@ function TransactionRow({
 }: {
   transaction: Transaction;
   bills: Bill[];
-  onMarkRecurring: (txnId: number, isRecurring: boolean, billId: number | null) => void;
+  onMarkRecurring: (txnId: number, isRecurring: boolean, billId: number | null, date: string) => void;
   onCreateBill: () => void;
   isLast: boolean;
   isSuggested: boolean;
@@ -1010,7 +1010,7 @@ function TransactionRow({
 
         {transaction.is_recurring && (
           <button
-            onClick={() => onMarkRecurring(transaction.id!, false, null)}
+            onClick={() => onMarkRecurring(transaction.id!, false, null, transaction.date)}
             style={{
               padding: "6px 10px",
               fontSize: 12,
@@ -1048,7 +1048,7 @@ function TransactionRow({
               <button
                 key={bill.id}
                 onClick={() => {
-                  onMarkRecurring(transaction.id!, true, bill.id);
+                  onMarkRecurring(transaction.id!, true, bill.id, transaction.date);
                   setShowBillSelect(false);
                 }}
                 style={{

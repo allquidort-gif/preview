@@ -311,7 +311,8 @@ export async function upsertAccountBalances(input: Omit<AccountBalances, "id" | 
 export type PayrollSettings = {
   id?: number;
   user_id: string | number;
-  amount: number;
+  checking_amount: number;
+  savings_amount: number;
   day_of_week: number; // 0=Sunday, 1=Monday, ..., 4=Thursday, etc.
   created_at?: string;
   updated_at?: string;

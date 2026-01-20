@@ -279,7 +279,7 @@ export default function BillsPage() {
         paid: nextPaid,
         paid_date,
         amount_paid,
-        notes: existing?.notes ?? null,
+        notes: existing?.notes ?? "",
       });
 
       const p = await listBillPayments({ userId, month });
@@ -312,7 +312,7 @@ export default function BillsPage() {
         paid,
         paid_date: patch.paid_date ?? existing?.paid_date ?? null,
         amount_paid: patch.amount_paid ?? existing?.amount_paid ?? null,
-        notes: patch.notes ?? existing?.notes ?? null,
+        notes: patch.notes ?? existing?.notes ?? "",
       });
 
       const p = await listBillPayments({ userId, month });

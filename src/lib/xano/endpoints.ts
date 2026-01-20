@@ -281,3 +281,75 @@ export async function getDashboardMonthly({ userId, month }: { userId: string; m
     transactions_by_type: Record<string, number>;
   }>(`/dashboard/monthly?user_id=${encodeURIComponent(userId)}&month=${encodeURIComponent(month)}`);
 }
+
+// ============ ACCOUNT BALANCES ============
+
+export type AccountBalances = {
+  id?: number;
+  user_id: string | number;
+  checking_balance: number;
+  savings_balance: number;
+  last_payroll_applied: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export async function getAccountBalances({ userId }: { userId: string }) {
+  const results = await xanoFetch<AccountBalances[]>(`/account-balances?user_id=${encodeURIComponent(userId)}`);
+  return results[0] ?? null;
+}
+
+export async function upsertAccountBalances(input: Omit<AccountBalances, "id" | "created_at" | "updated_at">) {
+  return xanoFetch<AccountBalances>(`/account-balances/upsert`, {
+    method: "POST",
+    body: input,
+  });
+}
+
+// ============ PAYROLL SETTINGS ============
+
+export type PayrollSettings = {
+  id?: number;
+  user_id: string | number;
+  amount: number;
+  day_of_week: number; // 0=Sunday, 1=Monday, ..., 4=Thursday, etc.
+  created_at?: string;
+  updated_at?: string;
+};
+
+export async function getPayrollSettings({ userId }: { userId: string }) {
+  const results = await xanoFetch<PayrollSettings[]>(`/payroll-settings?user_id=${encodeURIComponent(userId)}`);
+  return results[0] ?? null;
+}
+
+export async function upsertPayrollSettings(input: Omit<PayrollSettings, "id" | "created_at" | "updated_at">) {
+  return xanoFetch<PayrollSettings>(`/payroll-settings/upsert`, {
+    method: "POST",
+    body: input,
+  });
+}
+
+// ============ MONTHLY EXPENSES ============
+
+export type MonthlyExpenses = {
+  id?: number;
+  user_id: string | number;
+  month: string;
+  food: number;
+  entertainment: number;
+  other: number;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export async function getMonthlyExpenses({ userId, month }: { userId: string; month: string }) {
+  const results = await xanoFetch<MonthlyExpenses[]>(`/monthly-expenses?user_id=${encodeURIComponent(userId)}&month=${encodeURIComponent(month)}`);
+  return results[0] ?? null;
+}
+
+export async function upsertMonthlyExpenses(input: Omit<MonthlyExpenses, "id" | "created_at" | "updated_at">) {
+  return xanoFetch<MonthlyExpenses>(`/monthly-expenses/upsert`, {
+    method: "POST",
+    body: input,
+  });
+}

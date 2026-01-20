@@ -177,11 +177,8 @@ export default function BillsPage() {
       return sum + (r.bill.amount_expected ?? 0);
     }, 0);
     
-    // From Transactions = actual amount paid this month based on linked transactions
-    const totalFromTxns = rows.reduce((sum, r) => sum + (r.computed.actualFromTxns ?? 0), 0);
     const remaining = Math.max(0, totalExpected - totalPaid);
-    const linkedTxnCount = rows.reduce((sum, r) => sum + r.computed.transactionCount, 0);
-    return { totalExpected, totalPaid, totalFromTxns, remaining, linkedTxnCount };
+    return { totalExpected, totalPaid, remaining };
   }, [rows]);
 
   function goToPrevMonth() {
@@ -383,7 +380,6 @@ export default function BillsPage() {
         <Stat label="Expected" value={summary.totalExpected} />
         <Stat label="Paid" value={summary.totalPaid} />
         <Stat label="Remaining" value={summary.remaining} highlight={summary.remaining > 0} />
-        <Stat label="From Transactions" value={summary.totalFromTxns} subtitle={`${summary.linkedTxnCount} linked`} />
       </div>
 
       {error ? (

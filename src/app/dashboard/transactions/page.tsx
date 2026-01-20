@@ -171,6 +171,19 @@ function detectTransactionType(description: string, amount: number, bankCategory
   return "misc";
 }
 
+// Helper to find matching bill by merchant name
+function findMatchingBill(merchant: string, bills: Bill[]): Bill | null {
+  const merchantLower = merchant.toLowerCase();
+  for (const bill of bills) {
+    const billNameLower = bill.name.toLowerCase();
+    // Check if merchant contains bill name or vice versa
+    if (merchantLower.includes(billNameLower) || billNameLower.includes(merchantLower)) {
+      return bill;
+    }
+  }
+  return null;
+}
+
 export default function TransactionsPage() {
   const router = useRouter();
   const [userId, setUserId] = useState<string>("");
@@ -266,15 +279,66 @@ export default function TransactionsPage() {
 
       await createTransactionsRaw(rawTxns);
 
-      setUploadProgress("Processing transactions...");
+      setUploadProgress("Processing transactions and matching bills...");
 
-      // Bulk insert all transactions at once (avoids rate limit)
-      const txnData = parsed.map((p) => {
+      // Get current bills for matching
+      const currentBills = await listBills({ userId });
+      const activeBills = currentBills.filter((b) => b.active !== false);
+      
+      // Track bills we've created in this session to avoid duplicates
+      const createdBillsByMerchant = new Map<string, Bill>();
+
+      // Process transactions and create/match bills for recurring ones
+      const txnData: any[] = [];
+      
+      for (const p of parsed) {
         const txnType = detectTransactionType(p.description, p.amount, p.bank_category);
-        return {
+        const merchant = extractMerchant(p.description);
+        let billId: number | null = null;
+
+        // For recurring transactions, try to match or create a bill
+        if (txnType === "recurring" && p.amount < 0) {
+          const merchantKey = merchant.toLowerCase();
+          
+          // First check if we already created a bill for this merchant in this upload
+          const existingCreated = createdBillsByMerchant.get(merchantKey);
+          if (existingCreated) {
+            billId = existingCreated.id;
+          } else {
+            // Try to find a matching existing bill
+            const matchedBill = findMatchingBill(merchant, activeBills);
+            
+            if (matchedBill) {
+              billId = matchedBill.id;
+            } else {
+              // Create a new bill
+              setUploadProgress(`Creating bill for ${merchant}...`);
+              try {
+                const newBill = await createBill({
+                  user_id: userId,
+                  name: merchant,
+                  due_day: new Date(p.date).getDate(),
+                  amount_expected: Math.abs(p.amount),
+                  is_variable: false,
+                  autopay: false,
+                  active: true,
+                });
+                billId = newBill.id;
+                // Add to our tracking maps
+                createdBillsByMerchant.set(merchantKey, newBill);
+                activeBills.push(newBill);
+              } catch (billError) {
+                console.error("Failed to create bill:", billError);
+                // Continue without bill linkage
+              }
+            }
+          }
+        }
+
+        txnData.push({
           user_id: parseInt(userId),
           date: p.date,
-          merchant: extractMerchant(p.description),
+          merchant: merchant,
           description: p.description,
           amount: p.amount,
           category_id: 0,
@@ -283,20 +347,22 @@ export default function TransactionsPage() {
           is_split: false,
           notes: "",
           is_recurring: txnType === "recurring",
-          bill_id: null,
+          bill_id: billId,
           transaction_type: txnType,
-        };
-      });
+        });
+      }
 
+      setUploadProgress("Saving transactions...");
       await createTransactionsBulk({ user_id: parseInt(userId), transactions: txnData });
 
-      setUploadProgress(`Imported ${parsed.length} transactions!`);
+      const billsCreated = createdBillsByMerchant.size;
+      setUploadProgress(`Imported ${parsed.length} transactions! Created ${billsCreated} new bills.`);
       await refresh();
 
       setTimeout(() => {
         setUploadingAccount(null);
         setUploadProgress("");
-      }, 2000);
+      }, 3000);
     } catch (e: any) {
       setError(e?.message || "Failed to import transactions");
       setUploadingAccount(null);

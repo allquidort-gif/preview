@@ -439,6 +439,10 @@ export default function BillsPage() {
 
 // ============ COMPONENTS ============
 
+function formatCurrency(value: number): string {
+  return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 function Stat({ label, value, subtitle, highlight }: { label: string; value: number; subtitle?: string; highlight?: boolean }) {
   return (
     <div style={{ 
@@ -450,7 +454,7 @@ function Stat({ label, value, subtitle, highlight }: { label: string; value: num
     }}>
       <div style={{ fontSize: 12, opacity: 0.7 }}>{label}</div>
       <div style={{ fontSize: 18, marginTop: 4, fontWeight: 600, color: highlight ? "#dc2626" : "inherit" }}>
-        ${value.toFixed(2)}
+        ${formatCurrency(value)}
       </div>
       {subtitle && (
         <div style={{ fontSize: 11, opacity: 0.5, marginTop: 2 }}>{subtitle}</div>
@@ -548,11 +552,11 @@ function BillRow({
         {/* Amounts */}
         <div style={{ textAlign: "right", minWidth: 100 }}>
           <div style={{ fontWeight: 600, fontSize: 16 }}>
-            ${(computed.expectedAmount ?? 0).toFixed(2)}
+            ${formatCurrency(computed.expectedAmount ?? 0)}
           </div>
           {hasLinkedTxns && computed.actualFromTxns !== computed.expectedAmount && (
             <div style={{ fontSize: 11, color: "#6366f1" }}>
-              Actual: ${computed.actualFromTxns.toFixed(2)}
+              Actual: ${formatCurrency(computed.actualFromTxns)}
             </div>
           )}
         </div>
@@ -594,7 +598,7 @@ function BillRow({
                 <span style={{ marginLeft: 12 }}>{txn.merchant || txn.description.substring(0, 30)}</span>
               </div>
               <div style={{ fontWeight: 500, color: "#dc2626" }}>
-                -${Math.abs(txn.amount).toFixed(2)}
+                -${formatCurrency(Math.abs(txn.amount))}
               </div>
             </div>
           ))}
